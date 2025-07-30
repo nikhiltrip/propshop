@@ -9,12 +9,12 @@ PROJECTIONS_URL_PART = "api.prizepicks.com/projections"
 
 async def fetch_props():
     """
-    Launches a headless browser to scrape props from PrizePicks.
-    Returns a list of dictionaries, where each dictionary is a prop.
+    Launches a visible browser to reliably scrape props from PrizePicks.
+    Returns a dictionary of props, structured by player name.
     """
-    print("Launching headless browser to fetch PrizePicks data...")
+    print("Launching browser to fetch PrizePicks data (visible for reliability)...")
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True) 
+        browser = await p.chromium.launch(headless=False) 
         context = await browser.new_context(
             permissions=["geolocation"],
             geolocation={"latitude": 34.0522, "longitude": -118.2437},
@@ -42,15 +42,18 @@ async def fetch_props():
         try:
             await page.goto(APP_URL, wait_until="domcontentloaded", timeout=90000)
             print("Page loaded.")
+            
+            print("Waiting for page to settle...")
+            await page.wait_for_timeout(3000)
 
-            # --- Pop-up Handling ---
+            # --- More Robust Pop-up Handling ---
             try:
                 cookie_button = page.locator("button:has-text('Accept All')")
                 await cookie_button.click(timeout=5000)
                 await cookie_button.wait_for(state="hidden", timeout=5000)
                 print("Handled cookie banner.")
             except Exception:
-                pass # Ignore if not found
+                pass 
 
             try:
                 tutorial_popup = page.locator('[data-testid="modal-public-container"]')
@@ -59,25 +62,34 @@ async def fetch_props():
                     await tutorial_popup.wait_for(state="hidden", timeout=5000)
                     print("Handled tutorial pop-up.")
             except Exception:
-                pass # Ignore if not found
+                pass
 
-            # --- CAPTCHA Handling ---
-            try:
-                captcha_frame_locator = page.frame_locator("iframe[title='Human Challenge']")
-                hold_button = captcha_frame_locator.locator("button:has-text('Press & Hold')")
-                await hold_button.wait_for(state="visible", timeout=7000)
-                print("CAPTCHA found! Attempting to solve...")
-                box = await hold_button.bounding_box()
-                if box:
-                    await page.mouse.move(box['x'] + box['width'] / 2, box['y'] + box['height'] / 2)
-                    await page.mouse.down()
-                    hold_duration = random.uniform(4.5, 6.5)
-                    await asyncio.sleep(hold_duration)
-                    await page.mouse.up()
-                await hold_button.wait_for(state="hidden", timeout=5000)
-                print("CAPTCHA solved.")
-            except Exception:
-                pass # Ignore if not found
+            # --- RESILIENT CAPTCHA HANDLING ---
+            captcha_attempts = 0
+            max_attempts = 5
+            while captcha_attempts < max_attempts:
+                try:
+                    captcha_frame_locator = page.frame_locator("iframe[title='Human Challenge']")
+                    hold_button = captcha_frame_locator.locator("button:has-text('Press & Hold')")
+                    await hold_button.wait_for(state="visible", timeout=7000)
+                    
+                    print(f"CAPTCHA found! Attempting to solve (Attempt {captcha_attempts + 1}/{max_attempts})...")
+                    box = await hold_button.bounding_box()
+                    if box:
+                        await page.mouse.move(box['x'] + box['width'] / 2, box['y'] + box['height'] / 2)
+                        await page.mouse.down()
+                        hold_duration = random.uniform(4.5, 6.5)
+                        await asyncio.sleep(hold_duration)
+                        await page.mouse.up()
+                        print("Mouse released.")
+                    await page.wait_for_timeout(2000)
+                    captcha_attempts += 1
+                except Exception:
+                    print("CAPTCHA not visible. Assuming it is solved.")
+                    break
+            else:
+                 print("Failed to solve CAPTCHA after all attempts.")
+
 
             # --- Dynamic Waiting for Data ---
             print("Waiting for data to be captured...")
@@ -91,31 +103,24 @@ async def fetch_props():
         await browser.close()
         print("PrizePicks browser closed.")
 
-        # --- Process and Return the Data ---
         if not projections_data:
             print("Could not retrieve data from PrizePicks.")
-            return []
+            return {}
 
         players = {item['id']: item['attributes']['display_name'] for item in projections_data.get('included', []) if item['type'] == 'new_player'}
         
-        parsed_props = []
+        props_by_player = {}
         for projection in projections_data.get('data', []):
             if projection['type'] == 'projection':
                 player_id = projection['relationships']['new_player']['data']['id']
-                prop_info = {
-                    'player': players.get(player_id, "Unknown Player"),
-                    'stat': projection['attributes']['stat_type'],
-                    'line': projection['attributes']['line_score']
-                }
-                parsed_props.append(prop_info)
+                player_name = players.get(player_id)
+                if player_name:
+                    if player_name not in props_by_player:
+                        props_by_player[player_name] = []
+                    
+                    props_by_player[player_name].append({
+                        'stat': projection['attributes']['stat_type'],
+                        'line': projection['attributes']['line_score']
+                    })
         
-        return parsed_props
-
-# This block allows you to test this file directly if needed
-if __name__ == "__main__":
-    props = asyncio.run(fetch_props())
-    if props:
-        print(f"\nSuccessfully fetched {len(props)} props from PrizePicks.")
-        # Print the first 5 for demonstration
-        for prop in props[:5]:
-            print(f"- {prop['player']}: {prop['line']} {prop['stat']}")
+        return props_by_player
