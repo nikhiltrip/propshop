@@ -1,0 +1,215 @@
+.opportunity-table-container {
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+
+.table-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem;
+  background: rgba(0, 214, 101, 0.1);
+  border-bottom: 2px solid rgba(0, 214, 101, 0.2);
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.filter-control {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.filter-control label {
+  font-weight: 600;
+  color: #00d665;
+}
+
+.filter-control input[type="range"] {
+  width: 200px;
+  cursor: pointer;
+}
+
+.results-count {
+  color: #666;
+  font-weight: 500;
+}
+
+.table-wrapper {
+  overflow-x: auto;
+}
+
+.opportunity-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.opportunity-table thead {
+  background: linear-gradient(135deg, #00d665 0%, #00b856 100%);
+  color: white;
+}
+
+.opportunity-table th {
+  padding: 1rem;
+  text-align: left;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.2s ease;
+  white-space: nowrap;
+}
+
+.opportunity-table th:hover {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.opportunity-table tbody tr {
+  border-bottom: 1px solid #e0e0e0;
+  transition: background 0.2s ease;
+}
+
+.opportunity-table tbody tr:hover {
+  background: rgba(0, 214, 101, 0.05);
+}
+
+.opportunity-table td {
+  padding: 1rem;
+  vertical-align: middle;
+}
+
+.player-cell strong {
+  color: #333;
+  font-size: 1.05rem;
+}
+
+.line-cell {
+  font-weight: 600;
+  color: #00d665;
+  font-size: 1.1rem;
+}
+
+.direction-badge {
+  display: inline-block;
+  padding: 0.35rem 0.75rem;
+  border-radius: 20px;
+  font-weight: 600;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+}
+
+.direction-badge.over {
+  background: #4caf50;
+  color: white;
+}
+
+.direction-badge.under {
+  background: #f44336;
+  color: white;
+}
+
+.win-pct-cell {
+  font-weight: 600;
+  color: #00b856;
+}
+
+.odds-cell {
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.odds-cell div {
+  padding: 0.15rem 0;
+}
+
+.edge-cell {
+  text-align: center;
+}
+
+.edge-badge {
+  display: inline-block;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  font-weight: bold;
+  font-size: 1.1rem;
+}
+
+.edge-badge.high {
+  background: #4caf50;
+  color: white;
+}
+
+.edge-badge.medium {
+  background: #ff9800;
+  color: white;
+}
+
+.edge-badge.low {
+  background: #2196f3;
+  color: white;
+}
+
+.best-bet-cell {
+  min-width: 150px;
+}
+
+.best-bet {
+  background: linear-gradient(135deg, #00d665 0%, #00b856 100%);
+  color: white;
+  padding: 0.75rem;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.bet-type {
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.bet-payout {
+  font-size: 0.85rem;
+  opacity: 0.9;
+}
+
+.all-bets-cell {
+  min-width: 250px;
+}
+
+.qualifying-bets {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.bet-chip {
+  background: #f5f5f5;
+  border: 1px solid #ddd;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  color: #333;
+  white-space: nowrap;
+}
+
+@media (max-width: 1200px) {
+  .opportunity-table {
+    font-size: 0.9rem;
+  }
+  
+  .opportunity-table th,
+  .opportunity-table td {
+    padding: 0.75rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .table-controls {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .filter-control input[type="range"] {
+    width: 100%;
+  }
+}
