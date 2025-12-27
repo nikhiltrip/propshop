@@ -1,10 +1,10 @@
 # PropShop - +EV Sports Betting Analyzer
 
-> ⚠️ **WORK IN PROGRESS** -
+> **WORK IN PROGRESS** -
 
 A Python-based tool (in development) that will identify guaranteed positive expected value (+EV) betting opportunities by comparing PrizePicks prop lines with FanDuel odds. When specific threshold conditions are met, the tool will recommend optimal betting strategies to maximize long-term profit.
 
-## 🎯 Project Goal
+## Project Goal
 
 Find guaranteed +EV bets by:
 1. Scraping prop lines from PrizePicks
@@ -12,7 +12,7 @@ Find guaranteed +EV bets by:
 3. Identifying opportunities where the mathematical edge guarantees profit over time
 4. Recommending optimal betting strategies (e.g., 2-man power parlay, 4-man flex)
 
-## 🔧 Features
+## Features
 
 - **Automated Web Scraping**: Uses Playwright to reliably scrape data from both platforms
 - **CAPTCHA Handling**: Built-in resilient CAPTCHA solving for both PrizePicks and FanDuel
@@ -20,13 +20,13 @@ Find guaranteed +EV bets by:
 - **Geo-spoofing**: Simulates California location for PrizePicks access
 - **Async Processing**: Fast, efficient data collection using Python's asyncio
 
-## 📋 Prerequisites
+## Prerequisites
 
 - Python 3.8 or higher
 - Internet connection
 - Valid access to PrizePicks and FanDuel (must be in supported jurisdictions)
 
-## 🚀 Installation
+## Installation
 
 1. **Clone the repository**
    ```bash
@@ -46,7 +46,7 @@ Find guaranteed +EV bets by:
    playwright install chromium
    ```
 
-## 💻 Usagetest the scrapers:
+## Usagetest the scrapers:
 
 ```bash
 python main.py
@@ -61,7 +61,7 @@ python main.py
 2. Search FanDuel for corresponding player odds
 3. Display comparison data (comparison logic coming soon)
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 propshop/
@@ -72,7 +72,7 @@ propshop/
 └── README.md               # This file
 ```
 
-## 🔍 How It Works
+## How It Works
 
 ### 1. PrizePicks Scraper
 - Navigates to PrizePicks with a headless browser
@@ -94,12 +94,12 @@ Will identify +EV opportunities by:
 - Applying Kelly Criterion or similar bankroll management
 - Recommending optimal parlay configurations
 
-## 🎲 Betting Strategies (To Be Implemented)
+## Betting Strategies (To Be Implemented)
 
 The tool will recommend strategies based on edge strength:
 - **2-Man Power Parlay**: High confidence, lower risk
 - **3-Man Flex**: Balanced approach with insurance
-- *🚧 Current Limitations
+- *Current Limitations
 
 - **Incomplete**: Core comparison and analysis features are not implemented
 - **Limited Scope**: Only processes first 5 players from PrizePicks
@@ -108,7 +108,7 @@ The tool will recommend strategies based on edge strength:
 - **Manual CAPTCHA**: May require manual intervention if CAPTCHA solving fails
 - **Slow Execution**: Browser-based scraping takes several minutes to run
 
-## ⚠️ Important Notes
+## Important Notes
 
 - **Legal Disclaimer**: This tool is for educational and analytical purposes only. Ensure sports betting is legal in your jurisdiction before use.
 - **Browser Visibility**: Browsers run in non-headless mode to avoid detection and handle CAPTCHAs
@@ -141,18 +141,18 @@ The tool will recommend strategies based on edge strength:
 - [ ] Results logging and tracking
 - [ ] Historical performance analysis
 
-## 🤝 Contributing
+## Contributing
 
 This is a personal project, but suggestions and improvements are welcome! Feel free to:
 1. Fork the repository
 2. Create a feature branch
 3. Submit a pull request
 
-## 📝 License
+## License
 
 This project is for personal use. All rights reserved.
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - Built with [Playwright](https://playwright.dev/) for reliable web scraping
 - Inspired by the sports analytics and advantage play community
