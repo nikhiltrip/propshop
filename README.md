@@ -99,15 +99,46 @@ Will identify +EV opportunities by:
 The tool will recommend strategies based on edge strength:
 - **2-Man Power Parlay**: High confidence, lower risk
 - **3-Man Flex**: Balanced approach with insurance
-- *🚧 Current Limitations
+## 🔮 Future Vision
+
+The end goal is to create a fully automated, user-friendly system:
+
+**Backend (Headless Automation):**
+- All scraping runs in headless mode (no visible browsers)
+- Background process that runs on a schedule or on-demand
+- Automatic CAPTCHA solving without manual intervention
+- Fast, efficient data collection and analysis
+
+**Frontend (Local Web Interface):**
+- Clean, modern localhost web dashboard
+- Real-time display of +EV betting opportunities
+- Visual indicators for edge strength and confidence levels
+- Recommended betting strategies with stake sizing
+- Historical performance tracking and analytics
+- Mobile-responsive design for on-the-go access
+
+**Workflow:**
+1. User opens `http://localhost:3000` in browser
+2. Dashboard shows today's guaranteed +EV opportunities
+3. Each opportunity includes: player, prop, odds, edge %, recommended strategy
+4. One-click refresh to update with latest lines
+
+## 🚧 Current Limitations
 
 - **Incomplete**: Core comparison and analysis features are not implemented
 - **Limited Scope**: Only processes first 5 players from PrizePicks
 - **No Data Persistence**: Scraped data is only printed, not saved
+- **No Frontend**: No web interface (runs in terminal only)
+- **Visible Browsers**: Runs in non-headless mode for debugging
 - **No Error Recovery**: Script may fail if websites change their structure
 - **Manual CAPTCHA**: May require manual intervention if CAPTCHA solving fails
 - **Slow Execution**: Browser-based scraping takes several minutes to run
-
+Database for storing historical data
+- [ ] Backend API (Flask/FastAPI)
+- [ ] Frontend web interface (React/Vue/vanilla JS)
+- [ ] Headless browser mode (production-ready)
+- [ ] Scheduled/background scraping
+- [ ] 
 ## ⚠️ Important Notes
 
 - **Legal Disclaimer**: This tool is for educational and analytical purposes only. Ensure sports betting is legal in your jurisdiction before use.
