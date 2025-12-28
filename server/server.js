@@ -1,13 +1,44 @@
 const express = require('express');
 const cors = require('cors');
+const fs = require('fs');
+const path = require('path');
+const { spawn } = require('child_process');
 
 const app = express();
 const PORT = 3001;
+const DATA_FILE = path.join(__dirname, '..', 'data', 'opportunities.json');
+const PYTHON_VENV = path.join(__dirname, '..', 'venv', 'bin', 'python');
+const SCRAPER_SCRIPT = path.join(__dirname, '..', 'daily_scraper.py');
 
 app.use(cors());
 app.use(express.json());
 
-// Fake data - will be replaced with real Python engine data later
+let isScrapingInProgress = false; // Prevent multiple simultaneous scrapes
+
+// Helper function to read data from JSON file
+function readDataFile() {
+  try {
+    if (!fs.existsSync(DATA_FILE)) {
+      return null;
+    }
+    const data = fs.readFileSync(DATA_FILE, 'utf8');
+    return JSON.parse(data);
+  } catch (error) {
+    console.error('❌ Error reading data file:', error.message);
+    return null;
+  }
+}
+
+// Helper function to check if data is stale (> 24 hours old)
+function isDataStale(data) {
+  if (!data || !data.last_updated) return true;
+  const lastUpdate = new Date(data.last_updated);
+  const now = new Date();
+  const hoursSinceUpdate = (now - lastUpdate) / (1000 * 60 * 60);
+  return hoursSinceUpdate > 24;
+}
+
+// Legacy fake data for fallback (kept for reference)
 const fakeopportunities = [
   {
     id: 1,
@@ -107,22 +138,51 @@ const fakeopportunities = [
 
 // API Routes
 app.get('/api/opportunities', (req, res) => {
-  // Filter out non-+EV opportunities for the main view
-  const plusEvOpportunities = fakeopportunities.filter(
-    opp => opp.qualifying_bets.length > 0
-  );
-  
-  res.json({
-    success: true,
-    count: plusEvOpportunities.length,
-    total_scanned: fakeopportunities.length,
-    opportunities: plusEvOpportunities,
-    last_updated: new Date().toISOString()
-  });
+  try {
+    // Read from JSON file
+    const data = readDataFile();
+    
+    if (!data) {
+      // No data file exists yet
+      return res.json({
+        success: true,
+        count: 0,
+        opportunities: [],
+        stats: {
+          total_scanned: 0,
+          plus_ev_found: 0,
+          conversion_rate: 0,
+          avg_edge: 0,
+          best_edge: 0
+        },
+        last_updated: null,
+        message: 'No data available yet. Run daily scraper or trigger manual refresh.'
+      });
+    }
+    
+    res.json({
+      success: true,
+      count: data.opportunities.length,
+      opportunities: data.opportunities,
+      stats: data.stats,
+      last_updated: data.last_updated,
+      date: data.date,
+      is_stale: isDataStale(data)
+    });
+  } catch (error) {
+    console.error('❌ Error serving opportunities:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
 });
 
 app.get('/api/opportunities/:id', (req, res) => {
-  const opp = fakeopportunities.find(o => o.id === parseInt(req.params.id));
+  // Check cache or fake data for specific opportunity
+  const data = readDataFile();
+  const opportunities = data ? data.opportunities : fakeopportunities;
+  const opp = opportunities.find(o => o.id === parseInt(req.params.id));
   if (opp) {
     res.json({ success: true, opportunity: opp });
   } else {
@@ -131,31 +191,96 @@ app.get('/api/opportunities/:id', (req, res) => {
 });
 
 app.get('/api/stats', (req, res) => {
-  const plusEvCount = fakeopportunities.filter(o => o.qualifying_bets.length > 0).length;
-  const avgEdge = fakeopportunities
-    .filter(o => o.qualifying_bets.length > 0)
-    .reduce((sum, o) => {
-      const maxEdge = Math.max(...o.qualifying_bets.map(b => b.edge));
-      return sum + maxEdge;
-    }, 0) / plusEvCount;
-
-  res.json({
-    success: true,
-    stats: {
-      total_props_scanned: fakeopportunities.length,
-      plus_ev_found: plusEvCount,
-      conversion_rate: ((plusEvCount / fakeopportunities.length) * 100).toFixed(2),
-      avg_edge: avgEdge.toFixed(2),
-      best_edge: Math.max(
-        ...fakeopportunities
-          .filter(o => o.qualifying_bets.length > 0)
-          .map(o => Math.max(...o.qualifying_bets.map(b => b.edge)))
-      ).toFixed(2)
+  try {
+    const data = readDataFile();
+    
+    if (!data) {
+      return res.json({
+        success: true,
+        stats: {
+          total_scanned: 0,
+          plus_ev_found: 0,
+          conversion_rate: 0,
+          avg_edge: 0,
+          best_edge: 0
+        }
+      });
     }
+
+    res.json({
+      success: true,
+      stats: data.stats
+    });
+  } catch (error) {
+    console.error('❌ Error fetching stats:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Manual trigger endpoint for refreshing data
+app.post('/api/trigger-scrape', (req, res) => {
+  if (isScrapingInProgress) {
+    return res.status(202).json({
+      success: false,
+      message: 'Scraping already in progress. Please wait 2-3 minutes.',
+      in_progress: true
+    });
+  }
+
+  console.log('🔄 Manual scrape triggered...');
+  isScrapingInProgress = true;
+
+  // Spawn Python scraper process
+  const scraper = spawn(PYTHON_VENV, [SCRAPER_SCRIPT]);
+
+  let output = '';
+  let errorOutput = '';
+
+  scraper.stdout.on('data', (data) => {
+    output += data.toString();
+    console.log(data.toString());
+  });
+
+  scraper.stderr.on('data', (data) => {
+    errorOutput += data.toString();
+    console.error(data.toString());
+  });
+
+  scraper.on('close', (code) => {
+    isScrapingInProgress = false;
+    
+    if (code === 0) {
+      console.log('✅ Scraping completed successfully');
+      res.json({
+        success: true,
+        message: 'Data refreshed successfully',
+        data: readDataFile()
+      });
+    } else {
+      console.error(`❌ Scraping failed with exit code ${code}`);
+      res.status(500).json({
+        success: false,
+        message: 'Scraping failed. Check server logs for details.',
+        error: errorOutput
+      });
+    }
+  });
+
+  // Send initial response
+  res.status(202).json({
+    success: true,
+    message: 'Scraping started. This will take 2-3 minutes.',
+    in_progress: true
   });
 });
 
 app.listen(PORT, () => {
   console.log(`🚀 PropShop API Server running on http://localhost:${PORT}`);
-  console.log(`📊 View opportunities at http://localhost:3000`);
+  console.log(`📊 Dashboard: http://localhost:3000`);
+  console.log(`📁 Data file: ${DATA_FILE}`);
+  console.log(`\n💡 Daily scraper runs at midnight via cron`);
+  console.log(`💡 Manual trigger: POST http://localhost:${PORT}/api/trigger-scrape\n`);
 });

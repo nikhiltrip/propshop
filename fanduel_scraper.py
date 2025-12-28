@@ -211,7 +211,7 @@ async def fetch_odds(prizepicks_props_by_player: dict):
                     if prop_key not in temp_props:
                         temp_props[prop_key] = {
                             "player": player_name,
-                            "stat_type": stat_type,
+                            "stat": stat_type,  # Changed from stat_type to stat
                             "line": line_value,
                             "over_odds": None,
                             "under_odds": None
@@ -228,7 +228,7 @@ async def fetch_odds(prizepicks_props_by_player: dict):
                 for prop_key, prop_data in temp_props.items():
                     if prop_data["over_odds"] and prop_data["under_odds"]:
                         player_props.append(prop_data)
-                        print(f"  ✅ {prop_data['player']} - {prop_data['stat_type']} {prop_data['line']}, Over: {prop_data['over_odds']}, Under: {prop_data['under_odds']}")
+                        print(f"  ✅ {prop_data['player']} - {prop_data['stat']} {prop_data['line']}, Over: {prop_data['over_odds']}, Under: {prop_data['under_odds']}")
                 
                 if not player_props:
                     print(f"  ⚠️  No matching FanDuel odds found for PrizePicks lines")

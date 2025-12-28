@@ -10,6 +10,8 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [error, setError] = useState(null);
+  const [isStale, setIsStale] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const fetchData = async () => {
     try {
@@ -24,6 +26,7 @@ function App() {
       setOpportunities(oppsResponse.data.opportunities);
       setLastUpdated(oppsResponse.data.last_updated);
       setStats(statsResponse.data.stats);
+      setIsStale(oppsResponse.data.is_stale || false);
     } catch (err) {
       setError('Failed to fetch data. Make sure the server is running on port 3001.');
       console.error('Error fetching data:', err);
@@ -32,11 +35,51 @@ function App() {
     }
   };
 
+  const triggerManualScrape = async () => {
+    if (refreshing) return;
+    
+    try {
+      setRefreshing(true);
+      setError(null);
+      
+      await axios.post('/api/trigger-scrape');
+      
+      // Poll for completion (check every 5 seconds for 5 minutes max)
+      let attempts = 0;
+      const maxAttempts = 60; // 5 minutes
+      
+      const pollInterval = setInterval(async () => {
+        attempts++;
+        
+        try {
+          const response = await axios.get('/api/opportunities');
+          if (!response.data.is_stale || attempts >= maxAttempts) {
+            clearInterval(pollInterval);
+            setRefreshing(false);
+            fetchData();
+          }
+        } catch (e) {
+          // Keep polling
+        }
+        
+        if (attempts >= maxAttempts) {
+          clearInterval(pollInterval);
+          setRefreshing(false);
+          setError('Scraping took too long. Check back in a few minutes.');
+        }
+      }, 5000);
+      
+    } catch (err) {
+      setRefreshing(false);
+      setError('Failed to trigger data refresh: ' + err.message);
+    }
+  };
+
   useEffect(() => {
     fetchData();
     
-    // Auto-refresh every 60 seconds
-    const interval = setInterval(fetchData, 60000);
+    // Check for updates every 30 seconds (just to show if data changed)
+    const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);
   }, []);
 
@@ -48,10 +91,22 @@ function App() {
             <h1>💰 PropShop</h1>
             <p className="subtitle">+EV Sports Betting Opportunities</p>
           </div>
-          <button className="refresh-btn" onClick={fetchData} disabled={loading}>
-            {loading ? '⏳ Loading...' : '🔄 Refresh'}
-          </button>
+          <div className="header-actions">
+            {isStale && (
+              <button className="refresh-btn warning" onClick={triggerManualScrape} disabled={refreshing}>
+                {refreshing ? '⏳ Scraping (2-3 min)...' : '⚠️ Refresh Stale Data'}
+              </button>
+            )}
+            <button className="refresh-btn" onClick={fetchData} disabled={loading}>
+              {loading ? '⏳ Loading...' : '🔄 Reload View'}
+            </button>
+          </div>
         </div>
+        {isStale && (
+          <div className="stale-banner">
+            ⚠️ Data is more than 24 hours old. Lines may have moved. Click "Refresh Stale Data" to update.
+          </div>
+        )}
       </header>
 
       <main className="main-content">

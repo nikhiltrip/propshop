@@ -59,6 +59,31 @@
   cursor: not-allowed;
 }
 
+.refresh-btn.warning {
+  background: linear-gradient(135deg, #ff6b6b 0%, #ff8787 100%);
+  border-color: #ff8787;
+}
+
+.refresh-btn.warning:hover:not(:disabled) {
+  background: linear-gradient(135deg, #ff8787 0%, #ffa5a5 100%);
+}
+
+.header-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.stale-banner {
+  background: linear-gradient(135deg, #ff6b6b 0%, #ff8787 100%);
+  color: white;
+  padding: 12px 20px;
+  margin-top: 15px;
+  border-radius: 8px;
+  font-weight: 500;
+  text-align: center;
+  box-shadow: 0 2px 8px rgba(255, 107, 107, 0.3);
+}
+
 .main-content {
   flex: 1;
   max-width: 1400px;

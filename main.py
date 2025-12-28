@@ -1,8 +1,27 @@
 # main.py
 
 import asyncio
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+import uvicorn
 from prizepicks_scraper import fetch_props as fetch_prizepicks_props
 from fanduel_scraper import fetch_odds as fetch_fanduel_odds
+
+# Initialize FastAPI app
+app = FastAPI(
+    title="PropShop +EV Analyzer",
+    description="Real-time sports betting edge finder using PrizePicks and FanDuel data",
+    version="1.0.0"
+)
+
+# Enable CORS for frontend access
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://localhost:3001"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # PrizePicks payout structures and minimum win % thresholds
 BET_TYPES = {
@@ -137,6 +156,113 @@ def display_opportunities(opportunities):
             
             print()
 
+@app.get("/api/analyze")
+async def analyze_opportunities():
+    """
+    API endpoint that runs the full analysis pipeline:
+    1. Fetches props from PrizePicks
+    2. Fetches odds from FanDuel
+    3. Analyzes for +EV opportunities
+    4. Returns formatted JSON for the dashboard
+    """
+    try:
+        # Fetch data from both sources
+        prizepicks_props = await fetch_prizepicks_props()
+        
+        if not prizepicks_props:
+            raise HTTPException(
+                status_code=503,
+                detail="Could not fetch PrizePicks data (CAPTCHA or network error)"
+            )
+        
+        fanduel_odds = await fetch_fanduel_odds(prizepicks_props)
+        
+        if not fanduel_odds:
+            raise HTTPException(
+                status_code=503,
+                detail="Could not fetch FanDuel odds"
+            )
+        
+        # Analyze for +EV opportunities
+        opportunities = find_plus_ev_opportunities(fanduel_odds)
+        
+        # Format for dashboard
+        formatted_opps = []
+        opp_id = 1
+        
+        for player, props in opportunities.items():
+            for prop in props:
+                # Determine best direction (Over or Under)
+                best_over = max(prop['over_qualifies'], key=lambda x: x['edge']) if prop['over_qualifies'] else None
+                best_under = max(prop['under_qualifies'], key=lambda x: x['edge']) if prop['under_qualifies'] else None
+                
+                if best_over and (not best_under or best_over['edge'] >= best_under['edge']):
+                    direction = 'over'
+                    best_bet = best_over
+                    all_qualifies = prop['over_qualifies']
+                    win_pct = prop['no_vig_over']
+                else:
+                    direction = 'under'
+                    best_bet = best_under
+                    all_qualifies = prop['under_qualifies']
+                    win_pct = prop['no_vig_under']
+                
+                formatted_opps.append({
+                    'id': opp_id,
+                    'player': player,
+                    'stat': prop['stat'],
+                    'line': prop['line'],
+                    'direction': direction,
+                    'odds': prop['over_odds'] if direction == 'over' else prop['under_odds'],
+                    'no_vig_win_pct': round(win_pct, 2),
+                    'edge': round(best_bet['edge'], 2),
+                    'best_bet_type': best_bet['bet_type'],
+                    'payout': best_bet['payout'],
+                    'all_qualifying_bets': [
+                        {
+                            'type': q['bet_type'],
+                            'edge': round(q['edge'], 2),
+                            'payout': q['payout']
+                        } for q in sorted(all_qualifies, key=lambda x: x['edge'], reverse=True)
+                    ]
+                })
+                opp_id += 1
+        
+        # Calculate stats
+        total_props_scanned = sum(len(props) for props in fanduel_odds.values())
+        total_plus_ev = len(formatted_opps)
+        avg_edge = sum(opp['edge'] for opp in formatted_opps) / total_plus_ev if total_plus_ev > 0 else 0
+        best_edge = max((opp['edge'] for opp in formatted_opps), default=0)
+        
+        return {
+            'opportunities': formatted_opps,
+            'stats': {
+                'total_scanned': total_props_scanned,
+                'plus_ev_found': total_plus_ev,
+                'conversion_rate': round((total_plus_ev / total_props_scanned * 100), 2) if total_props_scanned > 0 else 0,
+                'avg_edge': round(avg_edge, 2),
+                'best_edge': round(best_edge, 2)
+            },
+            'timestamp': None  # Frontend will set this
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Analysis error: {str(e)}")
+
+@app.get("/")
+async def root():
+    """Health check endpoint."""
+    return {
+        'status': 'online',
+        'service': 'PropShop +EV Analyzer',
+        'endpoints': {
+            '/api/analyze': 'Run full analysis pipeline',
+            '/docs': 'Interactive API documentation'
+        }
+    }
+
 async def main():
     """
     Main function to run all scrapers and process the data.
@@ -189,4 +315,15 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    import sys
+    
+    # Check if running as API server or CLI tool
+    if len(sys.argv) > 1 and sys.argv[1] == "--api":
+        print("🚀 Starting PropShop API Server...")
+        print("📊 Dashboard: http://localhost:3000")
+        print("🔧 API Docs: http://localhost:5001/docs")
+        print("⚡ API Endpoint: http://localhost:5001/api/analyze\n")
+        uvicorn.run(app, host="0.0.0.0", port=5001)
+    else:
+        # Run as CLI tool
+        asyncio.run(main())

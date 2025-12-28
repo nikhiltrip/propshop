@@ -10,3 +10,7 @@ ENV/
 *.egg-info/
 .DS_Store
 .propshop/
+
+# Data and logs
+data/
+logs/

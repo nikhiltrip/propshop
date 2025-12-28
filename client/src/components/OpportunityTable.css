@@ -22,6 +22,67 @@
   gap: 0.5rem;
 }
 
+.table-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(10px);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.filter-control {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 150px;
+}
+
+.filter-control select,
+.filter-control input[type="text"] {
+  padding: 0.5rem;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  font-size: 0.9rem;
+}
+
+.search-control {
+  position: relative;
+  flex: 1;
+  min-width: 250px;
+}
+
+.search-control input {
+  width: 100%;
+  padding-right: 35px;
+}
+
+.clear-search {
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: all 0.2s;
+}
+
+.clear-search:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
 .filter-control label {
   font-weight: 600;
   color: #00d665;
@@ -106,6 +167,44 @@
 
 .direction-badge.under {
   background: #f44336;
+  color: white;
+}
+
+.sport-cell {
+  text-align: center;
+}
+
+.sport-badge {
+  display: inline-block;
+  padding: 0.35rem 0.75rem;
+  border-radius: 20px;
+  font-weight: 600;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+}
+
+.sport-badge.nba {
+  background: linear-gradient(135deg, #1d428a 0%, #c8102e 100%);
+  color: white;
+}
+
+.sport-badge.nfl {
+  background: linear-gradient(135deg, #013369 0%, #d50a0a 100%);
+  color: white;
+}
+
+.sport-badge.mlb {
+  background: linear-gradient(135deg, #041e42 0%, #bf0d3e 100%);
+  color: white;
+}
+
+.sport-badge.nhl {
+  background: linear-gradient(135deg, #000000 0%, #c8102e 100%);
+  color: white;
+}
+
+.sport-badge.other {
+  background: rgba(255, 255, 255, 0.2);
   color: white;
 }
 
