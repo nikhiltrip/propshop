@@ -1,162 +1,330 @@
-# PropShop - +EV Sports Betting Analyzer
+# PropShop - Sports Betting Edge Analyzer
 
-> **WORK IN PROGRESS** -
+A full-stack web application that identifies positive expected value (+EV) betting opportunities by analyzing PrizePicks prop lines against FanDuel market odds. The system uses automated daily scraping, statistical analysis, and an interactive dashboard to surface profitable betting edges.
 
-A Python-based tool (in development) that will identify guaranteed positive expected value (+EV) betting opportunities by comparing PrizePicks prop lines with FanDuel odds. When specific threshold conditions are met, the tool will recommend optimal betting strategies to maximize long-term profit.
+## Overview
 
-## Project Goal
+PropShop compares PrizePicks projections with FanDuel's no-vig probabilities to identify bets where your expected win rate exceeds the minimum threshold for profitability. The application features a modern React dashboard with real-time filtering, search capabilities, and manual line adjustment tools.
 
-Find guaranteed +EV bets by:
-1. Scraping prop lines from PrizePicks
-2. Comparing them to corresponding odds on FanDuel
-3. Identifying opportunities where the mathematical edge guarantees profit over time
-4. Recommending optimal betting strategies (e.g., 2-man power parlay, 4-man flex)
+## Architecture
 
-## Features
+The system uses a batch processing architecture that runs once daily at midnight PST:
 
-- **Automated Web Scraping**: Uses Playwright to reliably scrape data from both platforms
-- **CAPTCHA Handling**: Built-in resilient CAPTCHA solving for both PrizePicks and FanDuel
-- **Player-Based Analysis**: Organizes props by player for easy comparison
-- **Geo-spoofing**: Simulates California location for PrizePicks access
-- **Async Processing**: Fast, efficient data collection using Python's asyncio
+- **Daily Scraper**: Automated Python script that collects data from PrizePicks and FanDuel
+- **File Storage**: Results stored in JSON format for instant dashboard access
+- **Node.js Backend**: Express server that serves pre-computed opportunities
+- **React Frontend**: Interactive dashboard with filtering, search, and manual editing features
+- **Cron Automation**: Scheduled midnight runs with manual override capability
 
-## Prerequisites
+Data is not live - the dashboard displays opportunities from the most recent daily scrape. This design prioritizes instant page loads and minimizes API costs over real-time updates.
 
-- Python 3.8 or higher
-- Internet connection
-- Valid access to PrizePicks and FanDuel (must be in supported jurisdictions)
+## Key Features
+
+### Data Collection
+- Automated web scraping using Playwright browser automation
+- Collects PrizePicks projections and FanDuel market odds
+- Processes 400+ player props across NBA, NFL, MLB, and NHL
+- Calculates no-vig probabilities to remove bookmaker margin
+- Identifies qualifying bet types based on edge thresholds
+
+### Dashboard Interface
+- Sport-specific filtering (NBA, NFL, MLB, NHL)
+- Player name search with live filtering
+- Sortable columns (edge, player, line)
+- Edge-based filtering with adjustable threshold slider
+- Manual line editing with real-time edge recalculation
+- Data freshness indicators and stale data warnings
+- Color-coded sport badges and edge indicators
+
+### Analysis Engine
+- Calculates true win probabilities from FanDuel odds
+- Compares against PrizePicks bet type thresholds
+- Identifies optimal betting strategies (2-6 pick parlays)
+- Computes expected edge for each opportunity
+- Supports both Power Play and Flex Play bet types
+
+### Automation
+- Cron job scheduled for midnight PST daily runs
+- Manual trigger endpoint for on-demand updates
+- Graceful error handling with detailed logging
+- Automatic data persistence between runs
+- Manual override when automation fails
 
 ## Installation
 
-1. **Clone the repository**
+### Prerequisites
+- Python 3.8 or higher
+- Node.js 14 or higher
+- npm or yarn package manager
+
+### Setup Instructions
+
+1. Clone the repository:
    ```bash
-   git clone <your-repo-url>
+   git clone <repository-url>
    cd propshop
    ```
 
-2. **Create a virtual environment** (recommended)
+2. Install Python dependencies:
    ```bash
    python3 -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
-
-3. **Install dependencies**
-   ```bash
-   pip install playwright asyncio
+   source venv/bin/activate
+   pip install playwright asyncio fastapi uvicorn
    playwright install chromium
    ```
 
-## Usagetest the scrapers:
+3. Install Node.js dependencies:
+   ```bash
+   cd server
+   npm install
+   cd ../client
+   npm install
+   cd ..
+   ```
 
+4. Set up the automated cron job:
+   ```bash
+   ./setup_cron.sh
+   ```
+
+## Usage
+
+### Starting the Dashboard
+
+Terminal 1 - Start the Node.js backend:
+```bash
+cd server
+npm start
+```
+
+Terminal 2 - Start the React frontend:
+```bash
+cd client
+npm start
+```
+
+The dashboard will be available at `http://localhost:3000`
+
+### Manual Data Collection
+
+To manually run the scraper and update data:
+```bash
+python daily_scraper.py
+```
+
+This will overwrite the existing data file with fresh opportunities. Use this when the automated cron job fails or when you want to update data outside the scheduled time.
+
+### Command Line Analysis
+
+For terminal-based analysis without the dashboard:
 ```bash
 python main.py
 ```
-
-**Current functionality:**
-1. Launches a browser window to scrape PrizePicks props
-2. Searches FanDuel for corresponding player odds (first 5 players only)
-3. Prints raw data to console
-
-**Note:** The script currently only collects data. The comparison logic and +EV analysis are not yet implemented.
-2. Search FanDuel for corresponding player odds
-3. Display comparison data (comparison logic coming soon)
 
 ## Project Structure
 
 ```
 propshop/
-├── main.py                  # Main orchestration script
-├── prizepicks_scraper.py    # PrizePicks data collection
-├── fanduel_scraper.py       # FanDuel odds scraping
-├── .gitignore              # Git ignore rules
-└── README.md               # This file
+├── daily_scraper.py           # Automated batch scraper
+├── main.py                    # CLI tool and FastAPI server (deprecated)
+├── prizepicks_scraper.py      # PrizePicks data collection
+├── fanduel_scraper.py         # FanDuel odds scraping
+├── setup_cron.sh              # Cron job installation script
+├── server/
+│   └── server.js              # Express API server
+├── client/
+│   ├── src/
+│   │   ├── App.js             # Main React component
+│   │   ├── components/
+│   │   │   ├── OpportunityTable.js
+│   │   │   └── StatsCard.js
+│   │   └── App.css
+│   └── package.json
+└── data/
+    └── opportunities.json      # Scraped opportunities (gitignored)
 ```
 
 ## How It Works
 
-### 1. PrizePicks Scraper
-- Navigates to PrizePicks with a headless browser
-- Intercepts API calls to capture raw projection data
-- Handles authentication and CAPTCHA challenges
-- Returns player props organized by player name
+### Data Collection Pipeline
 
-### 2. FanDuel Scraper
-- Searches for each player from PrizePicks data
-- Extracts corresponding**NOT YET IMPLEMENTED**)
-Will identify +EV opportunities by:
-- Calculating implied probability from FanDuel odds
-- Comparing against PrizePicks lines
-- Identifying threshold conditions that guarantee long-term profit
-- Applying Kelly Criterion or similar bankroll management
-- Recommending optimal parlay configurations based on edge strength
-- Calculating implied probability from FanDuel odds
-- Comparing against PrizePicks lines
-- Applying Kelly Criterion or similar bankroll management
-- Recommending optimal parlay configurations
+1. **PrizePicks Scraper**: Intercepts API calls to capture projection data including player names, stats, and lines
+2. **FanDuel Scraper**: Searches for corresponding players and extracts over/under odds for each prop
+3. **Probability Calculation**: Removes bookmaker vig to calculate true no-vig probabilities
+4. **Edge Analysis**: Compares win probabilities against PrizePicks bet type thresholds
+5. **Opportunity Detection**: Identifies bets where expected edge exceeds zero
+6. **Data Formatting**: Structures results with sport detection and bet recommendations
+7. **File Storage**: Saves to JSON for instant dashboard access
 
-## Betting Strategies (To Be Implemented)
+### Bet Type Analysis
 
-The tool will recommend strategies based on edge strength:
-- **2-Man Power Parlay**: High confidence, lower risk
-- **3-Man Flex**: Balanced approach with insurance
-- *Current Limitations
+The system evaluates nine different PrizePicks bet structures:
 
-- **Incomplete**: Core comparison and analysis features are not implemented
-- **Limited Scope**: Only processes first 5 players from PrizePicks
-- **No Data Persistence**: Scraped data is only printed, not saved
-- **No Error Recovery**: Script may fail if websites change their structure
-- **Manual CAPTCHA**: May require manual intervention if CAPTCHA solving fails
-- **Slow Execution**: Browser-based scraping takes several minutes to run
+**Power Play Bets** (all picks must hit):
+- 2-Pick: 57.74% win rate needed, 3x payout
+- 3-Pick: 55.05% win rate needed, 6x payout
+- 4-Pick: 56.23% win rate needed, 10x payout
+- 5-Pick: 54.93% win rate needed, 20x payout
+- 6-Pick: 54.66% win rate needed, 37.5x payout
+
+**Flex Play Bets** (allows one miss):
+- 3-Pick: 57.74% win rate needed, 3x payout
+- 4-Pick: 55.04% win rate needed, 6x payout
+- 5-Pick: 54.26% win rate needed, 10x payout
+- 6-Pick: 54.21% win rate needed, 25x payout
+
+### Manual Line Adjustment
+
+The dashboard allows manual line editing to account for market movements throughout the day. When you edit a line:
+
+1. The system estimates the new win probability using a linear approximation
+2. Each 1% line change affects win probability by approximately 2%
+3. Edge is recalculated based on the adjusted probability
+4. Changes are reflected immediately without re-scraping
+
+This feature is approximate and intended for quick what-if analysis rather than precise calculations.
+
+## Configuration
+
+### Cron Job Schedule
+
+By default, the scraper runs at midnight PST (8 AM UTC). To modify:
+
+```bash
+crontab -e
+```
+
+Adjust the time in the cron expression:
+```
+0 8 * * * cd /path/to/propshop && /path/to/venv/bin/python daily_scraper.py >> logs/scraper.log 2>&1
+```
+
+### Data Freshness
+
+The dashboard displays a warning when data is more than 24 hours old. Lines can move significantly in that time, so stale data should be refreshed before making betting decisions.
+
+## API Endpoints
+
+The Node.js server exposes the following endpoints:
+
+- `GET /api/opportunities` - Returns all +EV opportunities
+- `GET /api/stats` - Returns aggregate statistics
+- `POST /api/trigger-scrape` - Manually triggers the scraper
+- `GET /health` - Server health check
+
+## Technical Details
+
+### Technologies Used
+
+**Backend:**
+- Python 3.12 with asyncio for concurrent scraping
+- Playwright for browser automation
+- Express.js for API server
+- JSON file storage
+
+**Frontend:**
+- React 18.2.0 with hooks
+- Axios for HTTP requests
+- CSS3 with gradient styling
+- Responsive design patterns
+
+**Automation:**
+- Unix cron for scheduling
+- Bash scripts for setup
+- Process spawning for manual triggers
+
+### Browser Automation
+
+Scrapers run in visible browser mode to handle CAPTCHAs and avoid bot detection. The system includes:
+
+- User agent spoofing
+- Navigator property overrides
+- Cookie banner handling
+- Geo-location simulation (California)
+- Rate limiting with delays
+
+### Data Format
+
+Opportunities are stored in the following JSON structure:
+
+```json
+{
+  "opportunities": [
+    {
+      "id": 1,
+      "player": "Player Name",
+      "sport": "NBA",
+      "stat": "Points",
+      "line": 25.5,
+      "direction": "over",
+      "odds": -120,
+      "no_vig_win_pct": 55.5,
+      "edge": 1.3,
+      "best_bet_type": "6-Pick Flex",
+      "payout": 25,
+      "all_qualifying_bets": [...]
+    }
+  ],
+  "stats": {
+    "total_scanned": 398,
+    "plus_ev_found": 30,
+    "conversion_rate": 7.54,
+    "avg_edge": 1.48,
+    "best_edge": 4.36
+  },
+  "last_updated": "2025-12-27T00:15:23Z",
+  "date": "2025-12-27"
+}
+```
+
+## Known Limitations
+
+### CAPTCHA Challenges
+
+Betting sites actively prevent automated scraping using CAPTCHAs. The automated cron job may fail to complete, requiring manual intervention. When this happens, you can run the scraper manually and solve CAPTCHAs in the visible browser window.
+
+### Processing Time
+
+Scraping all 400+ players takes 15-25 minutes due to rate limiting and browser interactions. The batch processing architecture means you'll see yesterday's edges rather than live opportunities.
+
+### Line Movement
+
+Sports betting lines move constantly based on betting activity and news. Data from midnight may not reflect current market conditions. Use the manual line editing feature to adjust for known changes.
 
 ## Important Notes
 
-- **Legal Disclaimer**: This tool is for educational and analytical purposes only. Ensure sports betting is legal in your jurisdiction before use.
-- **Browser Visibility**: Browsers run in non-headless mode to avoid detection and handle CAPTCHAs
-- **Rate Limiting**: The script includes delays to avoid overwhelming servers
-- **Geo-Restrictions**: May require VPN or location spoofing based on your location
-- **Early Stage**: Expect bugs, incomplete features, and frequent changesEnsure sports betting is legal in your jurisdiction before use.
-- **Browser Visibility**: Browsers run in non-headless mode to avoid detection and handle CAPTCHAs
-- **Rate Limiting**: The script includes delays to avoid overwhelming servers
-- **Geo-Restrictions**: May require VPN or location spoofing based on your location
-**Completed:**
-- [x] Basic PrizePicks scraping (intercepts API calls)
-- [x] Basic FanDuel scraping (search-based, limited to 5 players)
-- [x] CAPTCHA handling for both platforms
+**Legal Disclaimer**: This tool is for educational and analytical purposes only. Ensure sports betting is legal in your jurisdiction before use. The software does not place bets or handle money directly.
 
-**In Progress:**
-- [ ] Data parsing and normalization
-- [ ] Complete FanDuel scraping (all players)
-- [ ] Store scraped data in structured format
+**Not Financial Advice**: Past edge does not guarantee future profits. Sports betting involves risk and this analysis does not account for all factors that affect outcomes.
 
-**Not Started:**
-- [ ] Odds comparison logic
-- [ ] +EV calculation algorithm  
-- [ ] Threshold detection for guaranteed profit
-- [ ] Betting strategy recommendations
-- [ ] Results logging and tracking
-- [ ] Historical performance analysis
-- [ ] Command-line interface with options
-- [ ] Output formatting (CSV, JSON, etc.)
-- [ ] Betting strategy recommendations
-- [ ] Results logging and tracking
-- [ ] Historical performance analysis
+**Rate Limiting**: Respect website terms of service. The scrapers include delays to avoid overwhelming servers.
+
+**Geo-Restrictions**: PrizePicks and FanDuel have location restrictions. You may need to be in supported jurisdictions to access their sites.
+
+## Future Enhancements
+
+Potential improvements for production deployment:
+
+- Integration with The Odds API for instant, CAPTCHA-free data access
+- Database storage (PostgreSQL) for historical tracking
+- Authentication system for multi-user access
+- Bet tracking and performance analytics
+- Mobile-responsive design improvements
+- Push notifications for high-edge opportunities
+- Bankroll management and Kelly Criterion integration
 
 ## Contributing
 
-This is a personal project, but suggestions and improvements are welcome! Feel free to:
-1. Fork the repository
-2. Create a feature branch
-3. Submit a pull request
+This project is maintained as a portfolio piece. Suggestions and improvements are welcome through pull requests or issues.
 
 ## License
 
-This project is for personal use. All rights reserved.
+This project is for personal and educational use. All rights reserved.
 
 ## Acknowledgments
 
-- Built with [Playwright](https://playwright.dev/) for reliable web scraping
-- Inspired by the sports analytics and advantage play community
+Built with Playwright for web scraping, React for the frontend, and Express.js for the API layer. Inspired by sports analytics and advantage play communities.
 
 ---
 
-**Disclaimer**: Sports betting involves risk. This tool provides analysis but does not guarantee profits. Always bet responsibly and within your means.
+**Risk Warning**: Sports betting involves financial risk. This tool provides analysis but does not guarantee profits. Always bet responsibly and within your means. Past performance does not indicate future results.
