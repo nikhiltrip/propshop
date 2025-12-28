@@ -30,10 +30,10 @@
   gap: 1rem;
   margin-bottom: 1.5rem;
   padding: 1rem;
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(0, 214, 101, 0.05);
   backdrop-filter: blur(10px);
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(0, 214, 101, 0.2);
 }
 
 .filter-control {
@@ -47,9 +47,9 @@
 .filter-control input[type="text"] {
   padding: 0.5rem;
   border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.1);
-  color: white;
+  border: 1px solid #ddd;
+  background: white;
+  color: #333;
   font-size: 0.9rem;
 }
 
@@ -68,9 +68,9 @@
   position: absolute;
   right: 5px;
   bottom: 5px;
-  background: rgba(255, 255, 255, 0.2);
+  background: #e0e0e0;
   border: none;
-  color: white;
+  color: #666;
   width: 30px;
   height: 30px;
   border-radius: 50%;
@@ -80,12 +80,13 @@
 }
 
 .clear-search:hover {
-  background: rgba(255, 255, 255, 0.3);
+  background: #d0d0d0;
+  color: #333;
 }
 
 .filter-control label {
   font-weight: 600;
-  color: #00d665;
+  color: #333;
 }
 
 .filter-control input[type="range"] {
@@ -94,7 +95,7 @@
 }
 
 .results-count {
-  color: #666;
+  color: #333;
   font-weight: 500;
 }
 
