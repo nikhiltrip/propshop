@@ -91,16 +91,11 @@ function App() {
             <h1>💰 PropShop</h1>
             <p className="subtitle">+EV Sports Betting Opportunities</p>
           </div>
-          <div className="header-actions">
-            {isStale && (
-              <button className="refresh-btn warning" onClick={triggerManualScrape} disabled={refreshing}>
-                {refreshing ? '⏳ Scraping (2-3 min)...' : '⚠️ Refresh Stale Data'}
-              </button>
-            )}
-            <button className="refresh-btn" onClick={fetchData} disabled={loading}>
-              {loading ? '⏳ Loading...' : '🔄 Reload View'}
+          {isStale && (
+            <button className="refresh-btn warning" onClick={triggerManualScrape} disabled={refreshing}>
+              {refreshing ? '⏳ Scraping (2-3 min)...' : '⚠️ Refresh Stale Data'}
             </button>
-          </div>
+          )}
         </div>
         {isStale && (
           <div className="stale-banner">

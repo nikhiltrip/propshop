@@ -68,11 +68,6 @@
   background: linear-gradient(135deg, #ff8787 0%, #ffa5a5 100%);
 }
 
-.header-actions {
-  display: flex;
-  gap: 10px;
-}
-
 .stale-banner {
   background: linear-gradient(135deg, #ff6b6b 0%, #ff8787 100%);
   color: white;
