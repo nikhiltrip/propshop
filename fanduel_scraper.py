@@ -103,9 +103,10 @@ async def fetch_odds(prizepicks_props_by_player: dict):
             window.chrome = {runtime: {}};
         """)
 
-        # We will only search for the first 2 players for faster testing.
-        for i, player_name in enumerate(player_names[:2]):
-            print(f"\n--- ({i+1}/2) Searching for player: {player_name} ---")
+        # Search for all players
+        total_players = len(player_names)
+        for i, player_name in enumerate(player_names):
+            print(f"\n--- ({i+1}/{total_players}) Searching for player: {player_name} ---")
             try:
                 # For each player, we start fresh by navigating to the homepage.
                 print(f"Navigating to FanDuel homepage for new search...")

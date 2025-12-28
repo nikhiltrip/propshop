@@ -4,9 +4,67 @@ import './OpportunityTable.css';
 function OpportunityTable({ opportunities }) {
   const [sortField, setSortField] = useState('edge');
   const [sortDirection, setSortDirection] = useState('desc');
-  const [filterMinEdge, setFilterMinEdge] = useState(0);
+  const [filterMinEdge, setFilterMinEdge] = useState(-100);
   const [searchPlayer, setSearchPlayer] = useState('');
   const [filterSport, setFilterSport] = useState('All');
+  const [editedOpportunities, setEditedOpportunities] = useState({});
+
+  // Function to convert American odds to decimal
+  const americanToDecimal = (americanOdds) => {
+    if (americanOdds > 0) {
+      return (americanOdds / 100) + 1;
+    } else {
+      return (100 / Math.abs(americanOdds)) + 1;
+    }
+  };
+
+  // Function to recalculate edge based on new line
+  const recalculateEdge = (opp, newLine) => {
+    // Get the odds for the direction (PrizePicks odds)
+    const prizePicksOdds = opp.odds;
+    const decimalOdds = americanToDecimal(prizePicksOdds);
+    const impliedProb = (1 / decimalOdds) * 100;
+
+    // For simplicity, assume win probability scales linearly with line change
+    // In reality, you'd need the full probability distribution
+    const lineChange = ((newLine - opp.line) / opp.line) * 100;
+    
+    // Rough estimate: each 1% line change affects win prob by ~2-5%
+    // This is a simplification; real calculation would need the full model
+    let adjustedWinProb = parseFloat(opp.no_vig_win_pct || 50);
+    
+    if (opp.direction === 'over') {
+      adjustedWinProb = adjustedWinProb - (lineChange * 2); // Harder to hit
+    } else {
+      adjustedWinProb = adjustedWinProb + (lineChange * 2); // Easier to hit
+    }
+    
+    // Clamp between 1 and 99
+    adjustedWinProb = Math.max(1, Math.min(99, adjustedWinProb));
+    
+    const newEdge = adjustedWinProb - impliedProb;
+    
+    return {
+      newWinProb: adjustedWinProb,
+      newEdge: newEdge
+    };
+  };
+
+  const handleLineEdit = (oppId, newLine) => {
+    const opp = opportunities.find(o => o.id === oppId);
+    if (!opp) return;
+
+    const { newWinProb, newEdge } = recalculateEdge(opp, parseFloat(newLine));
+    
+    setEditedOpportunities(prev => ({
+      ...prev,
+      [oppId]: {
+        line: parseFloat(newLine),
+        no_vig_win_pct: newWinProb,
+        edge: newEdge
+      }
+    }));
+  };
 
   // Get unique sports from opportunities
   const availableSports = ['All', ...new Set(opportunities.map(opp => opp.sport || 'Other'))];
@@ -21,6 +79,10 @@ function OpportunityTable({ opportunities }) {
   };
 
   const getMaxEdge = (opp) => {
+    // Check if manually edited
+    if (editedOpportunities[opp.id]?.edge !== undefined) {
+      return editedOpportunities[opp.id].edge;
+    }
     // Handle both old format (qualifying_bets) and new format (edge)
     if (opp.edge !== undefined) {
       return opp.edge;
@@ -96,9 +158,9 @@ function OpportunityTable({ opportunities }) {
           <label>Min Edge: {filterMinEdge}%</label>
           <input
             type="range"
-            min="0"
-            max="5"
-            step="0.1"
+            min="-100"
+            max="10"
+            step="0.5"
             value={filterMinEdge}
             onChange={(e) => setFilterMinEdge(parseFloat(e.target.value))}
           />
@@ -170,14 +232,23 @@ function OpportunityTable({ opportunities }) {
                     </span>
                   </td>
                   <td>{opp.stat}</td>
-                  <td className="line-cell">{opp.line}</td>
+                  <td className="line-cell">
+                    <input
+                      type="number"
+                      step="0.5"
+                      className="line-edit-input"
+                      value={editedOpportunities[opp.id]?.line ?? opp.line}
+                      onChange={(e) => handleLineEdit(opp.id, e.target.value)}
+                      title="Edit line to recalculate edge"
+                    />
+                  </td>
                   <td>
                     <span className={`direction-badge ${opp.direction}`}>
                       {opp.direction?.toUpperCase() || 'N/A'}
                     </span>
                   </td>
                   <td className="win-pct-cell">
-                    {opp.no_vig_win_pct || (opp.direction === 'over' ? opp.no_vig_over?.toFixed(2) : opp.no_vig_under?.toFixed(2))}%
+                    {(editedOpportunities[opp.id]?.no_vig_win_pct ?? opp.no_vig_win_pct ?? (opp.direction === 'over' ? opp.no_vig_over : opp.no_vig_under)).toFixed(2)}%
                   </td>
                   <td className="odds-cell">
                     {opp.odds ? (

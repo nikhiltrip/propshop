@@ -152,6 +152,29 @@
   font-size: 1.1rem;
 }
 
+.line-edit-input {
+  width: 70px;
+  padding: 0.35rem 0.5rem;
+  border: 2px solid #00d665;
+  border-radius: 6px;
+  background: white;
+  color: #333;
+  font-weight: 600;
+  font-size: 1rem;
+  text-align: center;
+  transition: all 0.2s;
+}
+
+.line-edit-input:focus {
+  outline: none;
+  border-color: #00b856;
+  box-shadow: 0 0 0 3px rgba(0, 214, 101, 0.1);
+}
+
+.line-edit-input:hover {
+  border-color: #00b856;
+}
+
 .direction-badge {
   display: inline-block;
   padding: 0.35rem 0.75rem;
