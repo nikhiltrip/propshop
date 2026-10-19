@@ -1,5 +1,3 @@
 # PropShop documentation
 
-This legacy guide has been superseded by [README.md](README.md).
-
-Live collection is currently blocked by source access and has not been verified end to end. The current collector does not disguise automation, spoof location, or automate CAPTCHA interaction. See the README for setup, model assumptions, verification, and remaining work.
+See [README.md](README.md) for the current working public-feed collector, setup, and model assumptions. It collects public PrizePicks lines and multi-sportsbook comparisons through ScoresAndOdds without a sportsbook login. Direct browser adapters remain optional and unverified. No CAPTCHA automation is used.

@@ -26,7 +26,7 @@ function snapshot(now = Date.now()) {
     : data.opportunities.filter(
         (row) =>
           fresh(row.prizepicks_observed_at, now) &&
-          fresh(row.fanduel_observed_at, now) &&
+          fresh(row.sportsbook_observed_at || row.fanduel_observed_at, now) &&
           Date.parse(row.start_time) > now,
       );
   const positive = rows.filter((r) => r.edge > 0);
@@ -37,6 +37,7 @@ function snapshot(now = Date.now()) {
     is_stale: stale,
     last_updated: valid ? data.last_updated : null,
     source: valid ? data.source : null,
+    source_info: valid ? data.source_info : null,
     models: valid ? data.models : {},
     methodology: valid ? data.methodology : null,
     stats: {
@@ -84,12 +85,10 @@ function createApp({ spawnProcess = spawn } = {}) {
     );
     return row
       ? res.json({ success: true, opportunity: row })
-      : res
-          .status(404)
-          .json({
-            success: false,
-            message: "No fresh opportunity with that ID.",
-          });
+      : res.status(404).json({
+          success: false,
+          message: "No fresh opportunity with that ID.",
+        });
   });
   app.get("/api/scrape-status", (req, res) => res.json(status()));
   app.post("/api/trigger-scrape", (req, res) => {
@@ -106,18 +105,15 @@ function createApp({ spawnProcess = spawn } = {}) {
         .status(403)
         .json({ success: false, message: "Local requests only." });
     if (child)
-      return res
-        .status(409)
-        .json({
-          success: false,
-          message: "Collection already running.",
-          collection: job,
-        });
+      return res.status(409).json({
+        success: false,
+        message: "Collection already running.",
+        collection: job,
+      });
     job = {
       state: "running",
       started_at: new Date().toISOString(),
-      message:
-        "Collecting PrizePicks and FanDuel. Manual verification may be required.",
+      message: "Collecting public PrizePicks lines and sportsbook quotes.",
     };
     const venv = path.join(ROOT, ".venv", "bin", "python");
     const python =
@@ -148,7 +144,12 @@ function createApp({ spawnProcess = spawn } = {}) {
       });
       child.once("close", (code) => {
         if (launchFailed) return;
-        const saved = readJSON("collection-status.json");
+        const savedStatus = readJSON("collection-status.json");
+        const saved =
+          savedStatus &&
+          Date.parse(savedStatus.started_at) >= Date.parse(job.started_at)
+            ? savedStatus
+            : null;
         finish(
           code === 0 ? "succeeded" : "failed",
           timedOut

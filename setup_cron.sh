@@ -13,8 +13,8 @@ if [[ "$TASK_ROOT" == *"'"* || "$TASK_ROOT" == *'%'* ]]; then
 fi
 mkdir -p "$TASK_ROOT/logs"
 TASK_CRON="0 0 * * * cd '$TASK_ROOT' && '$PYTHON_BIN' daily_scraper.py >> '$TASK_ROOT/logs/scraper.log' 2>&1 # propshop-daily"
-echo 'Live collection requires restored source access. A daily snapshot expires after 15 minutes.'
-echo 'This optional job runs at midnight in the cron daemon timezone, without a visible browser.'
+echo 'The default collector uses public comparison data. A daily snapshot expires after 15 minutes.'
+echo 'This optional job runs at midnight in the cron daemon timezone.'
 printf '%s\n' "$TASK_CRON"
 read -r -p 'Install this optional cron job? [y/N] ' response
 if [[ "$response" == 'y' || "$response" == 'Y' ]]; then

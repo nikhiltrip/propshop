@@ -17,7 +17,7 @@ export default function OpportunityTable({ opportunities, loading }) {
   const [search, setSearch] = useState("");
   const [sport, setSport] = useState("All");
   const [model, setModel] = useState("6-Pick Flex");
-  const [minEdge, setMinEdge] = useState(0);
+  const [minEdge, setMinEdge] = useState("");
   const [sort, setSort] = useState("edge");
   const [positiveOnly, setPositiveOnly] = useState(true);
   const rows = opportunities
@@ -28,7 +28,7 @@ export default function OpportunityTable({ opportunities, loading }) {
         row.player.toLowerCase().includes(search.trim().toLowerCase()) &&
         (sport === "All" || sport === row.sport) &&
         (!positiveOnly || row.model.edge > 0) &&
-        row.model.edge >= Number(minEdge),
+        (minEdge === "" || row.model.edge >= Number(minEdge)),
     )
     .sort((a, b) =>
       sort === "player"
@@ -104,9 +104,9 @@ export default function OpportunityTable({ opportunities, loading }) {
               <tr>
                 <th>Player / market</th>
                 <th>Pick</th>
-                <th>PP / FD line</th>
-                <th>FD over / under</th>
-                <th>No-vig estimate</th>
+                <th>PrizePicks line</th>
+                <th>Sportsbook quotes</th>
+                <th>No-vig consensus</th>
                 <th>Edge (pp)</th>
                 <th>Illustrative entry ROI</th>
                 <th>Event starts</th>
@@ -115,39 +115,79 @@ export default function OpportunityTable({ opportunities, loading }) {
             <tbody>
               {rows.map((row) => (
                 <tr key={row.id}>
-                  <td>
+                  <td data-label="Player / market">
                     <strong>{row.player}</strong>
                     <small>
                       <span className="sport-tag">{row.sport}</span> {row.stat}
                     </small>
                   </td>
-                  <td>
+                  <td data-label="Pick">
                     <span className={`direction ${row.direction}`}>
                       {row.direction === "over" ? "More" : "Less"}
                     </span>
                   </td>
-                  <td className="number">
-                    {row.line} / {row.fanduel_line}
+                  <td className="number" data-label="PrizePicks line">{row.line}</td>
+                  <td className="number" data-label="Sportsbook quotes">
+                    <details className="quotes">
+                      <summary>
+                        {row.book_count || 1}{" "}
+                        {row.book_count > 1 ? "books" : "book"}
+                      </summary>
+                      {(
+                        row.book_comparisons || [
+                          {
+                            name: "FanDuel",
+                            over_odds: row.over_odds,
+                            under_odds: row.under_odds,
+                            no_vig_over: row.no_vig_over,
+                          },
+                        ]
+                      ).map((book) => (
+                        <div key={book.name}>
+                          <strong>{book.name}</strong>
+                          <small>
+                            O {odds(book.over_odds)} / U {odds(book.under_odds)}{" "}
+                            · O {book.no_vig_over?.toFixed(2)}%
+                          </small>
+                        </div>
+                      ))}
+                      {row.provider_updated_at && (
+                        <small>
+                          Feed record updated{" "}
+                          {new Date(
+                            row.provider_updated_at,
+                          ).toLocaleTimeString()}
+                        </small>
+                      )}
+                      <a
+                        href={
+                          row.source_url ||
+                          "https://www.scoresandodds.com/nfl/props"
+                        }
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        View source ↗
+                      </a>
+                    </details>
                   </td>
-                  <td className="number">
-                    {odds(row.over_odds)} / {odds(row.under_odds)}
-                  </td>
-                  <td className="number">
-                    {row.no_vig_win_pct.toFixed(2)}%
+                  <td className="number" data-label="Consensus likelihood">
+                    <div>More {row.no_vig_over.toFixed(2)}%</div>
+                    <div>Less {row.no_vig_under.toFixed(2)}%</div>
                     <small>Break-even {row.model.threshold.toFixed(2)}%</small>
                   </td>
-                  <td
+                  <td data-label="Edge (percentage points)"
                     className={row.model.edge > 0 ? "green number" : "number"}
                   >
                     {row.model.edge > 0 ? "+" : ""}
                     {row.model.edge.toFixed(2)}
                   </td>
-                  <td className="number">
+                  <td className="number" data-label="Illustrative entry ROI">
                     {row.model.equal_leg_roi_pct > 0 ? "+" : ""}
                     {row.model.equal_leg_roi_pct.toFixed(2)}%
                     <small>Equal, independent legs</small>
                   </td>
-                  <td>
+                  <td data-label="Event starts">
                     {new Date(row.start_time).toLocaleString()}
                     <small>{row.event}</small>
                   </td>
@@ -169,18 +209,20 @@ export default function OpportunityTable({ opportunities, loading }) {
           <p>
             {opportunities.length
               ? "Try a different entry model, sport, or minimum edge."
-              : "Collect PrizePicks projections and FanDuel odds to see fresh, exact-line comparisons here."}
+              : "Collect PrizePicks lines and sportsbook odds to see fresh, exact-line comparisons here."}
           </p>
           <span className="empty-caption">
             {opportunities.length
               ? `${opportunities.length} fresh matches available before filters`
-              : "No sample bets. No estimated prices."}
+              : "Waiting for fresh source data."}
           </span>
         </div>
       )}
       <div className="board-foot">
         {rows.length} shown · {opportunities.length} fresh matches{" "}
-        <span>Line edits require new market odds.</span>
+        <span>
+          Standard-payout model · confirm line and payout in PrizePicks
+        </span>
       </div>
     </section>
   );

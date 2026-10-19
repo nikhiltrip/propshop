@@ -23,7 +23,7 @@ class PipelineTests(unittest.TestCase):
             daily_scraper.atomic_json(root / "opportunities.json", old)
             with patch.object(daily_scraper, "DATA_DIR", root), patch.object(
                 daily_scraper, "collect_browser", fail
-            ), patch("sys.argv", ["daily_scraper.py"]):
+            ), patch("sys.argv", ["daily_scraper.py", "--source", "browser"]):
                 with self.assertRaises(SystemExit) as result:
                     daily_scraper.main()
                 self.assertEqual(result.exception.code, 1)

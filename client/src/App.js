@@ -59,7 +59,7 @@ export default function App() {
         <a className="brand" href="/">
           p<span>/</span> PropShop
         </a>
-        <span className="header-note">PRIZEPICKS × FANDUEL</span>
+        <span className="header-note">PRIZEPICKS × THE MARKET</span>
         <span className={`status ${rows.length ? "connected" : ""}`}>
           {rows.length ? "Snapshot available" : "Awaiting data"}
         </span>
@@ -85,7 +85,7 @@ export default function App() {
           <span>compared with</span>
           <span>
             <i className="dot fd" />
-            FanDuel no-vig probabilities
+            Sportsbook consensus
           </span>
           <span className="timestamp">
             {data?.last_updated
@@ -93,6 +93,34 @@ export default function App() {
               : "No successful collection yet"}
           </span>
         </div>
+        {data?.source_info && (
+          <div className="provenance">
+            <a
+              href="https://www.scoresandodds.com/nfl/props"
+              target="_blank"
+              rel="noreferrer"
+            >
+              {data.source_info.source_name} ↗
+            </a>
+            <span>
+              PrizePicks lines are reported by this source. Confirm the current
+              line and standard payout in PrizePicks.
+            </span>
+            {data.source_info.coverage
+              ?.filter((c) => c.markets.length === 0)
+              .map((c) => (
+                <span key={c.sport}>
+                  {c.sport}: this source has no props published.
+                </span>
+              ))}
+            {data.source_info.warnings?.length > 0 && (
+              <strong>
+                {data.source_info.warnings.length} source requests were
+                unavailable; coverage is partial.
+              </strong>
+            )}
+          </div>
+        )}
         {error && (
           <div className="notice error" role="alert">
             {error}
@@ -106,8 +134,8 @@ export default function App() {
         )}
         {busy && (
           <div className="notice" role="status">
-            Collecting both boards. If a visible browser requests verification,
-            complete it manually. Results appear when the collection finishes.
+            Collecting public lines and two-sided sportsbook prices. Results
+            appear when collection finishes.
           </div>
         )}
         {data?.is_stale && data.last_updated && (
@@ -122,9 +150,15 @@ export default function App() {
             <small>Last successful run</small>
           </div>
           <div>
-            <span>FanDuel collected</span>
-            <strong>{data?.stats?.fanduel_collected ?? "—"}</strong>
-            <small>Two-sided markets</small>
+            <span>Sportsbook quotes</span>
+            <strong>
+              {data?.stats?.sportsbook_collected ??
+                data?.stats?.fanduel_collected ??
+                "—"}
+            </strong>
+            <small>
+              {data?.stats?.books_collected ?? 0} sportsbooks collected
+            </small>
           </div>
           <div>
             <span>Fresh exact matches</span>
@@ -141,18 +175,23 @@ export default function App() {
         <details className="method">
           <summary>How to read this board</summary>
           <p>
-            FanDuel implied over and under probabilities are normalized to
-            remove the margin. This is a market estimate, not a measured win
-            rate. Edge is the difference in percentage points between that
-            estimate and the selected entry model’s break-even rate.
+            Each sportsbook’s over and under probabilities are normalized to
+            remove its margin. The displayed consensus is the median over
+            probability across books offering this exact line (with under equal
+            to one minus over). A single-book result is labeled. This is a
+            market estimate, not a measured win rate. Edge is the difference in
+            percentage points between that estimate and the selected entry
+            model’s break-even rate.
           </p>
           <p>
             Illustrative entry ROI assumes every leg has the displayed
             probability and all legs are independent. It is not the expected
             return of one pick or a recommended lineup. Actual payouts,
             correlation, promotions and settlement rules can change the result.
-            Integer lines, modified projections, started events and unknown
-            markets are excluded.
+            Integer lines, started events and unknown markets are excluded. The
+            public feed does not certify modified-projection status or your
+            account’s payout. All entry-model estimates are conditional on
+            standard payouts; verify them in PrizePicks.
           </p>
           <p>
             Models use standard Player Picks minimum-guarantee payouts,

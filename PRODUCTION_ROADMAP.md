@@ -1,12 +1,12 @@
 # PropShop remaining work
 
-See [README.md](README.md) for the current implementation and verified limitations.
+The default public-comparison collector now works end to end. See [README.md](README.md) for setup and methodology.
 
-1. Restore source access; browser verification was followed by an access restriction during the October 19, 2026 test.
-2. Capture successful current source payloads and add regression fixtures without user/account data. Validate both parser schemas and stat/league navigation.
-3. Reconcile event IDs and start times across the two sources, preserving exact period and line matching.
-4. Measure market coverage and collection duration; load missing player-market tabs explicitly.
-5. If using a provider, verify current PrizePicks and FanDuel player-prop coverage before purchasing or implementing it.
-6. Add deployment authentication and source-appropriate refresh limits before exposing the local API publicly.
+1. Track source latency and compare third-party PrizePicks lines against the live account board. The feed can lag and does not verify projection modifiers or account payouts.
+2. Add a properly licensed data contract before relying on the public website endpoint for uptime or public distribution.
+3. Extend explicitly supported stat aliases/markets only with source evidence and period/settlement tests. NBA currently has no props in the source.
+4. Add a model for ties/voids and correlated unequal-leg entries before expanding beyond the current conditional standard-payout analysis.
+5. Add authentication and deployment monitoring before exposing the local API publicly.
+6. Direct browser adapters remain optional and unverified; their dedicated profile supports manual login persistence when source access permits it.
 
-No live end-to-end success, profitability, or production readiness is claimed.
+Successful retrieval and positive modeled edge do not establish realized profits or verified entry eligibility.

@@ -16,6 +16,8 @@ const base = {
   over_odds: -150,
   under_odds: 120,
   no_vig_win_pct: 56.8,
+  no_vig_over: 56.8,
+  no_vig_under: 43.2,
   start_time: "2030-01-01T12:00:00Z",
   event: "Synthetic event",
   models: [
@@ -44,6 +46,10 @@ test("changing entry model re-filters against the selected payout threshold", ()
   });
   expect(container.textContent).not.toContain("Synthetic Player");
   expect(container.textContent).toContain("No comparisons match these filters");
+  const positiveOnly = container.querySelector('input[type="checkbox"]');
+  act(() => positiveOnly.click());
+  expect(container.textContent).toContain("Synthetic Player");
+  expect(container.textContent).toContain("-0.94");
   act(() => root.unmount());
   container.remove();
 });

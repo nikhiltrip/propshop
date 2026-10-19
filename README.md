@@ -1,101 +1,104 @@
 # PropShop
 
-A React dashboard for comparing standard PrizePicks player projections with FanDuel two-sided player-prop odds. Python collects public board responses, validates exact market matches, removes the bookmaker margin, and publishes a snapshot served by Express.
+A local React dashboard that compares PrizePicks lines with sportsbook over/under prices and ranks estimated edges. Python collects the free [ScoresAndOdds prop comparisons](https://www.scoresandodds.com/nfl/props), validates exact event/line matches, calculates no-vig probabilities, and publishes a snapshot served by Express.
 
-## Current state (October 19, 2026)
+## Working data path
 
-The analysis, snapshot pipeline, API lifecycle, and React production build have automated/local validation. **Live end-to-end collection has not been verified.** PrizePicks' direct public endpoint returned HTTP 403. The ordinary browser board loaded in one session, but the separate scraper browser was restricted after manual verification. No successful live snapshot was produced, and no real profitable bets are claimed.
+The default collector uses the same public comparison request as ScoresAndOdds' free **Odds Compare** drawer. Its response includes PrizePicks main lines and prices from FanDuel, DraftKings, BetMGM, Caesars, bet365, BetRivers, Hard Rock and Fanatics. It does not require a sportsbook login or API key. No premium projections, account data, affiliate links, or betting actions are used.
 
-The collection adapters need validation against successful current source responses once access is restored. They intentionally stop rather than disguise the browser, simulate location, solve challenges, or invent data. Having Playwright installed does not guarantee either site permits the browser session.
+A successful October 19, 2026 run retrieved **72 PrizePicks lines and 267 sportsbook quotes**, producing **53 exact-line comparisons across NFL, NHL and MLB**, including one above the standard-payout model's break-even rate. Those counts describe that run, not guaranteed future coverage or profitability. The source had no NBA props published at the time.
+
+**PrizePicks lines are reported by a third party.** The source does not certify your account's payout, promotions, or Goblin/Demon status. Every entry model is conditional on standard Player Picks payouts. Confirm both the line and payout in PrizePicks before relying on an estimated edge. Prices may move or the source may lag: a source refresh does not guarantee the underlying sportsbook just updated its quote.
 
 ## Run locally
 
-Requires Python 3.9+, Node 20+, npm, and a Playwright Chromium installation.
+Requires Python 3.9+ and Node 20+. The default public collector uses the Python standard library; no browser installation is required.
 
 ```bash
-python3 -m venv .venv
-.venv/bin/python -m pip install -r requirements.txt
-.venv/bin/python -m playwright install chromium
 npm ci --prefix server
 npm ci --prefix client
 npm run build --prefix client
-PROPSHOP_HEADED=1 node server/server.js
+PORT=3011 node server/server.js
 ```
 
-Open http://localhost:3001. The API serves the built React app. `PORT=3011` selects a different port if needed. The server binds to loopback; this is a local tool with no public authentication system.
+Open http://localhost:3011 and click **Collect fresh lines**. The API serves the built React dashboard. The server binds to loopback, with no public authentication system. For frontend development, use the API's default port 3001 and `npm start --prefix client`; the development proxy targets port 3001.
 
-Click **Collect fresh lines** to launch the collector. Set `PROPSHOP_HEADED=1` to show the browser. If a site requests human verification, complete it yourself. If it restricts access after verification, stop and resolve access with the source. Repeated challenges are not a reliability strategy.
-
-For frontend development, start the API on port 3001 and run `npm start --prefix client` in another terminal. React's development proxy targets port 3001.
-
-Run collection directly:
+Standalone collection:
 
 ```bash
-.venv/bin/python daily_scraper.py --headed --sports NBA,NFL,MLB,NHL
+python3 daily_scraper.py
+# Limit collection if desired:
+python3 daily_scraper.py --sports NFL --max-events 5
 ```
+
+The collector discovers public market categories and game IDs, checks schedule start times for today and tomorrow, and makes bounded requests with three workers and at least 350 ms between request starts. Access denials/rate limits stop subsequent requests. There are no retries, proxy rotation or challenge automation. NBA/NFL/MLB/NHL are supported only when the source actually publishes relevant props.
 
 Configuration uses exported environment variables, not automatic `.env` loading:
 
 | Variable | Purpose |
 | --- | --- |
-| `PROPSHOP_HEADED=1` | Show the ordinary collection browser |
-| `PROPSHOP_SPORTS=NBA,NFL` | Limit league navigation |
-| `PYTHON=/absolute/path/to/python` | Override the collector interpreter; otherwise `.venv/bin/python`, then `python3` |
-| `PROPSHOP_DATA_DIR=/absolute/path` | Override snapshot/status location |
-| `PROPSHOP_SAVE_RAW=1` | Save public JSON payloads in ignored `data/raw/` for parser debugging |
-| `PORT=3001` | API/static dashboard port |
+| `PROPSHOP_SOURCE=public` | Default: public ScoresAndOdds comparison feed |
+| `PROPSHOP_SPORTS=NBA,NFL,MLB,NHL` | Leagues to collect |
+| `PYTHON=/absolute/path/to/python` | Interpreter override; otherwise `.venv/bin/python`, then `python3` |
+| `PROPSHOP_DATA_DIR=/absolute/path` | Snapshot/status location |
+| `PORT=3001` | API/static dashboard port; use 3011 if 3001 is occupied |
 
-CLI options also include `--timeout` (1–300 seconds for the initial PrizePicks response) and `--max-events` (1–100 events per league; default 20). The API terminates collection after ten minutes. No schedule is installed automatically. Daily-only collection is insufficient to keep a 15-minute snapshot fresh.
+`--max-events` limits total upcoming games (1–100, default 20). The API stops a collection after ten minutes. Snapshots expire after 15 minutes and started events are excluded. Collection is on demand; polling the local API does not fetch third-party prices. No recurring schedule is installed automatically.
 
-## Comparison rules
+## What the percentages mean
 
-A match requires the same league, normalized player name, explicit stat alias, numeric line, full-game period, and timezone-aware event start time. Different start times are deliberately unmatched; they need source event-ID reconciliation rather than a guessed association. Ambiguous matches, incomplete odds, unknown periods/stats, started games, modified PrizePicks projections, and observations older than 15 minutes are excluded.
-
-Both FanDuel prices must be available at the exact PrizePicks line. American prices are converted to implied probabilities, then normalized:
+For each sportsbook at the **exact PrizePicks line**, convert both prices to implied probabilities and normalize to remove that book's margin:
 
 ```text
 no_vig_over = implied_over / (implied_over + implied_under)
 no_vig_under = 1 - no_vig_over
 ```
 
-These are **market probability estimates**, not measured true win rates. Integer lines are excluded because ties require a separate settlement/push model. There is no invented probability adjustment when a line changes: obtain fresh matching odds instead.
+The displayed consensus is the median over probability across eligible books, with under equal to one minus over. This prevents selecting only the most optimistic sportsbook. Single-book estimates are labeled. Expand **Sportsbook quotes** to see each book's over/under prices and over probability. Different lines are never interpolated.
 
-## Edge and payouts
+Matching requires league, normalized player, explicit stat alias, numeric line, full-game period, start time and shared provider event ID. Ambiguous duplicate book quotes, incomplete/invalid prices, unavailable lines, unknown markets, started events, and observations retrieved more than 15 minutes ago are excluded. Integer lines are excluded because ties need a separate settlement model.
 
-Each selectable entry model has an equal-leg break-even probability calculated from its complete payout table. For Power entries only an all-hit outcome pays. Flex calculations include every partial-hit payout, including payouts below the original entry fee.
+A market percentage is an estimate from offered prices, not a measured true win rate.
+
+## Edge and entry models
 
 ```text
-edge (percentage points) = no-vig win percentage - entry-model break-even percentage
+edge (percentage points) = consensus win percentage - model break-even percentage
 illustrative entry ROI = expected payout for n independent, equally likely legs - 1
 ```
 
-The ROI column is an illustration for an entire entry whose legs all have the displayed probability. It is **not** the return of one prop, a selected real lineup, or a guaranteed profit. Actual unequal-leg entries can be evaluated with `analysis.expected_return`, which assumes independence. This project does not estimate correlations, validate lineup eligibility, model leaderboard winnings, or account for DNPs/reboots/promotions.
+Power models include the all-hit payout. Flex models include every partial-hit payout, including returns below the entry fee. Break-even thresholds are calculated from those complete payout tables rather than hard-coded rounded rates.
 
-Standard Player Picks minimum-guarantee payouts were checked against [PrizePicks Potential Outcomes](https://www.prizepicks.com/help-center/potential-outcomes) on October 19, 2026. Verify the actual payout shown in your account. The model excludes Team/Culture picks, Early Payout, discounted/Goblin/Demon projections, and leaderboard prizes.
+Entry ROI describes an entire hypothetical entry whose legs all have the displayed probability. It is not one prop's expected return, a selected real lineup, or a guarantee. The project does not model correlations, actual entry eligibility, leaderboard payouts, account-specific offers, DNPs/reboots, or Early Payout.
 
-## Reliability
+Standard Player Picks minimum-guarantee payouts were checked against [PrizePicks Potential Outcomes](https://www.prizepicks.com/help-center/potential-outcomes) on October 19, 2026. Verify the actual payout shown in your account. Modified projections are not validated by the public feed and must not be treated as certified standard-payout picks.
 
-- One HTTP response per collection trigger; clients poll explicit job state.
-- In-process API lock plus a POSIX file lock for CLI/cron overlap.
-- A failed collection preserves the last successful snapshot.
-- Writes use a temporary file and atomic replacement.
-- Versioned snapshots reject legacy/fake result formats.
-- Expired observations and started games are hidden on every API read.
-- Empty/unavailable data never falls back to fake bets.
-- Browser adapters use normal Playwright Chromium with no stealth scripts, fake geolocation, or automated challenge interaction.
-- The API has a ten-minute collection deadline. The standalone CLI has per-navigation/initial-response timeouts.
+## Optional direct browser adapters
 
-The browser parser supports known PrizePicks JSON projections and FanDuel event/market attachments. FanDuel navigation is bounded by `--max-events` and may not load all player markets or lazy-loaded tabs. Changed response schemas, blocked requests, missing player tabs, and inconsistent event times can result in no accepted matches. This is reported as a failure, not a fresh empty success.
+The older direct PrizePicks/FanDuel route remains experimental and is **not needed by the default data path**. It was blocked by source restrictions during testing. It has not been verified end to end.
 
-## API
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python -m playwright install chromium
+.venv/bin/python daily_scraper.py --source browser --headed --timeout 300
+```
+
+This route uses a dedicated persistent profile at ignored `data/browser-profile/`, so a successful manual login can survive later runs. `PROPSHOP_PROFILE_DIR` overrides its path. This profile contains private session cookies: do not upload or share it. It never reads or copies your main Chrome profile. `PROPSHOP_HEADED=1` shows the browser; complete any verification yourself. Restrictions stop collection. There are no stealth scripts, fake geolocation, or automated CAPTCHA actions.
+
+`PROPSHOP_SAVE_RAW=1` optionally saves direct-browser public response payloads for parser debugging; the default public collector does not persist raw payloads.
+
+## Reliability and API
+
+Collection has an API process lock and a POSIX file lock for CLI overlap. Failed collections preserve the last successful snapshot. Files are published with temporary-file/atomic replacement. Schema checks reject legacy fake-result formats. No unavailable-data path falls back to sample bets.
 
 | Endpoint | Response |
 | --- | --- |
 | `GET /health` | Server health |
-| `GET /api/opportunities` | Fresh comparisons, summary, snapshot timestamp, collection state |
+| `GET /api/opportunities` | Fresh comparisons, source/coverage, summary, collection state |
 | `GET /api/opportunities/:id` | Fresh row or 404 |
-| `GET /api/stats` | Summary of currently eligible matches |
-| `POST /api/trigger-scrape` | 202 accepted, 409 already running, or explicit failure |
+| `GET /api/stats` | Summary |
+| `POST /api/trigger-scrape` | 202 accepted, 409 running, or explicit failure |
 | `GET /api/scrape-status` | `idle`, `running`, `succeeded`, `failed`, or `interrupted` |
 
 ## Verification
@@ -103,23 +106,14 @@ The browser parser supports known PrizePicks JSON projections and FanDuel event/
 ```bash
 python3 -m unittest discover -s tests -v
 node --test server/server.test.js
+CI=true npm test --prefix client -- --watchAll=false --runInBand
 npm run build --prefix client
 ```
 
-Python tests use synthetic fixtures explicitly constructed in the test files. They cover string odds, invalid prices, no-vig normalization, full Flex payout math, exact-market matching, ambiguity, stale timestamps, modified projections, and preservation of prior snapshots after failure. API tests exercise job locking, launch failure, expiry, missing rows, and cross-site trigger rejection. Passing these tests does not validate current live source compatibility.
+Tests use synthetic fixtures confined to tests. They cover odds validation, no-vig math, complete Flex payouts, consensus across same-line books, provider event identity/periods, source provenance, exclusion of premium fields, access-denial handling, stale/started rows, snapshot preservation, job lifecycle, model switching and empty states. Live collection and the dashboard refresh button are checked separately against real public data.
 
-## Files
+## Remaining limitations
 
-- `collectors.py`: public browser collection and strict source parsers
-- `analysis.py`: market normalization, no-vig calculation, payout models, comparison
-- `daily_scraper.py`: locking, collection status, atomic snapshot publishing
-- `server/server.js`: API and built React hosting
-- `client/src/`: dashboard, filters, sorting, status and methodology
-- `tests/`, `server/server.test.js`: deterministic verification
-- `data/`: ignored runtime snapshots and diagnostics
+The public endpoint is an implementation detail of another site, not a contracted API with an uptime guarantee. Its schema, availability, or permitted access can change. Source coverage is partial and third-party lines can lag. The dashboard shows provenance and source warnings rather than claiming complete market coverage.
 
-The repository inherited tracked `node_modules/` directories. `.gitignore` now prevents newly untracked dependencies; removing already-tracked dependency trees is separate repository housekeeping. Install from package lockfiles for reproducibility.
-
-## Next step for live data
-
-Restore permitted source access and capture successful public responses, then validate the adapters against them. A licensed provider with verified PrizePicks **and** FanDuel player-prop coverage is an alternative; no provider subscription, coverage, or integration is assumed here.
+Before public deployment, add authentication, operational monitoring, and data-use arrangements suitable for the intended use. The repository inherited tracked `node_modules/` directories; install from package lockfiles and keep future dependency housekeeping separate.

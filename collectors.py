@@ -141,8 +141,17 @@ async def collect_browser(sports, headed=False, timeout=90, max_events=20):
             (root / (source + ".json")).write_text(json.dumps(payload))
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=not headed)
-        context = await browser.new_context()
+        # Dedicated profile retains only this app's session, never the user's main profile.
+        profile = Path(
+            os.getenv(
+                "PROPSHOP_PROFILE_DIR",
+                Path(__file__).parent / "data" / "browser-profile",
+            )
+        )
+        profile.mkdir(parents=True, exist_ok=True, mode=0o700)
+        context = await p.chromium.launch_persistent_context(
+            str(profile), headless=not headed
+        )
         page = await context.new_page()
         tasks = set()
 
@@ -294,7 +303,7 @@ async def collect_browser(sports, headed=False, timeout=90, max_events=20):
                     "FanDuel returned no supported two-sided player markets. Manual verification, region access, or a parser update may be required. No new results were published."
                 )
         finally:
-            await browser.close()
+            await context.close()
 
     def dedupe(rows, fields):
         return list({tuple(str(r.get(k)) for k in fields): r for r in rows}.values())

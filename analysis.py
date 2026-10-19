@@ -2,6 +2,7 @@
 
 import hashlib
 import math
+import statistics
 import re
 import unicodedata
 from datetime import datetime, timezone
@@ -37,7 +38,13 @@ ALIASES = {
     "points": ["points", "pts", "player_points"],
     "rebounds": ["rebounds", "rebs", "player_rebounds"],
     "assists": ["assists", "asts", "player_assists"],
-    "threes": ["3-pt made", "3-pointers made", "made threes", "player_threes"],
+    "threes": [
+        "3-pt made",
+        "3-pointers made",
+        "3 pointers",
+        "made threes",
+        "player_threes",
+    ],
     "points_rebounds_assists": [
         "pts+rebs+asts",
         "points + rebounds + assists",
@@ -167,7 +174,9 @@ def compare(prizepicks, fanduel, now=None, max_age_seconds=900):
             if not 0 <= age <= max_age_seconds or parse_time(row["start_time"]) <= now:
                 raise ValueError("Old odds")
             calculate_no_vig_probability(row["over_odds"], row["under_odds"])
-            index.setdefault(key, []).append(row)
+            index.setdefault(key, {}).setdefault(
+                row.get("bookmaker", "fanduel"), []
+            ).append(row)
         except (KeyError, TypeError, ValueError):
             rejected += 1
     results, seen = [], set()
@@ -176,7 +185,7 @@ def compare(prizepicks, fanduel, now=None, max_age_seconds=900):
             key = match_key(pp)
             age = (now - parse_time(pp["observed_at"])).total_seconds()
             if (
-                pp.get("variant") != "standard"
+                pp.get("variant") not in ("standard", "provider_main")
                 or not 0 <= age <= max_age_seconds
                 or parse_time(pp["start_time"]) <= now
             ):
@@ -184,15 +193,45 @@ def compare(prizepicks, fanduel, now=None, max_age_seconds=900):
             # Integer lines need a push/void model. Do not pretend P(win | no tie) is P(win).
             if float(pp["line"]).is_integer():
                 raise ValueError("Push model required")
-            candidates = index.get(key, [])
-            if len(candidates) != 1:
+            candidate_groups = index.get(key, {})
+            candidates = [
+                rows[0]
+                for rows in candidate_groups.values()
+                if len(rows) == 1
+                and (
+                    not pp.get("event_id") or rows[0].get("event_id") == pp["event_id"]
+                )
+            ]
+            if not candidates:
                 raise ValueError("Missing or ambiguous event/market")
             if key in seen:
                 continue
             seen.add(key)
-            fd = candidates[0]
-            over, under = calculate_no_vig_probability(
-                fd["over_odds"], fd["under_odds"]
+            book_comparisons = []
+            for quote in candidates:
+                o, u = calculate_no_vig_probability(
+                    quote["over_odds"], quote["under_odds"]
+                )
+                book_comparisons.append(
+                    {
+                        "bookmaker": quote.get("bookmaker", "fanduel"),
+                        "name": quote.get("bookmaker_name", "FanDuel"),
+                        "over_odds": quote["over_odds"],
+                        "under_odds": quote["under_odds"],
+                        "no_vig_over": round(o, 4),
+                        "no_vig_under": round(u, 4),
+                        "observed_at": quote["observed_at"],
+                    }
+                )
+            # Median of available same-line books avoids selecting the most optimistic quote.
+            over = statistics.median(b["no_vig_over"] for b in book_comparisons)
+            under = 100 - over
+            fd = min(
+                candidates,
+                key=lambda q: abs(
+                    calculate_no_vig_probability(q["over_odds"], q["under_odds"])[0]
+                    - over
+                ),
             )
             direction, pct = ("over", over) if over >= under else ("under", under)
             models = []
@@ -223,6 +262,15 @@ def compare(prizepicks, fanduel, now=None, max_age_seconds=900):
                     "stat": pp["stat"],
                     "line": float(pp["line"]),
                     "fanduel_line": float(fd["line"]),
+                    "sportsbook_line": float(fd["line"]),
+                    "reference_bookmaker": fd.get("bookmaker_name", "FanDuel"),
+                    "book_comparisons": book_comparisons,
+                    "book_count": len(book_comparisons),
+                    "payout_verified": pp.get("variant") == "standard",
+                    "source_url": fd.get(
+                        "source_url", "https://sportsbook.fanduel.com/"
+                    ),
+                    "provider_updated_at": fd.get("provider_updated_at"),
                     "direction": direction,
                     "over_odds": float(fd["over_odds"]),
                     "under_odds": float(fd["under_odds"]),
@@ -235,6 +283,7 @@ def compare(prizepicks, fanduel, now=None, max_age_seconds=900):
                     "start_time": pp["start_time"],
                     "prizepicks_observed_at": pp["observed_at"],
                     "fanduel_observed_at": fd["observed_at"],
+                    "sportsbook_observed_at": min(q["observed_at"] for q in candidates),
                     "event": fd.get("event", ""),
                     "prizepicks_url": "https://app.prizepicks.com/",
                     "fanduel_url": "https://sportsbook.fanduel.com/",
@@ -251,6 +300,8 @@ def compare(prizepicks, fanduel, now=None, max_age_seconds=900):
         "models": BET_TYPES,
         "payout_source": PAYOUT_SOURCE,
         "stats": {
+            "sportsbook_collected": len(fanduel),
+            "books_collected": len({r.get("bookmaker", "fanduel") for r in fanduel}),
             "prizepicks_collected": len(prizepicks),
             "fanduel_collected": len(fanduel),
             "total_scanned": len(results),
@@ -258,5 +309,5 @@ def compare(prizepicks, fanduel, now=None, max_age_seconds=900):
             "rejected": rejected,
             "best_edge": max((r["edge"] for r in results), default=0),
         },
-        "methodology": "Proportional no-vig market estimates. Edge is percentage points above an equal-probability, independent-leg entry break-even rate. Entry ROI is illustrative, not individual-pick ROI. Standard Player Picks minimum guarantee only; no leaderboard, promotions, ties, DNPs or correlation model.",
+        "methodology": "Median proportional no-vig estimates across available exact-line sportsbooks. For provider main lines, payout eligibility is unverified and the standard-payout model is conditional. Edge is percentage points above an equal-probability, independent-leg entry break-even rate. Entry ROI is illustrative, not individual-pick ROI. Standard Player Picks minimum guarantee only; no leaderboard, promotions, ties, DNPs or correlation model.",
     }

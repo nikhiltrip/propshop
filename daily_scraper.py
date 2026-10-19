@@ -10,6 +10,7 @@ import sys
 import tempfile
 from analysis import compare, utc_now
 from collectors import CollectionError, collect_browser
+from public_feed import collect_public
 
 ROOT = Path(__file__).resolve().parent
 DATA_DIR = Path(os.environ.get("PROPSHOP_DATA_DIR", ROOT / "data"))
@@ -40,6 +41,11 @@ def main():
     parser.add_argument(
         "--sports", default=os.getenv("PROPSHOP_SPORTS", "NBA,NFL,MLB,NHL")
     )
+    parser.add_argument(
+        "--source",
+        choices=["public", "browser"],
+        default=os.getenv("PROPSHOP_SOURCE", "public"),
+    )
     parser.add_argument("--timeout", type=int, default=90)
     parser.add_argument("--max-events", type=int, default=20)
     args = parser.parse_args()
@@ -59,11 +65,19 @@ def main():
         status_path = DATA_DIR / "collection-status.json"
         atomic_json(status_path, {"state": "running", "started_at": started})
         try:
-            pp, fd = asyncio.run(
-                collect_browser(sports, args.headed, args.timeout, args.max_events)
-            )
+            if args.source == "public":
+                pp, fd, source_info = collect_public(sports, DATA_DIR, args.max_events)
+            else:
+                pp, fd = asyncio.run(
+                    collect_browser(sports, args.headed, args.timeout, args.max_events)
+                )
+                source_info = {
+                    "source": "browser",
+                    "source_name": "Direct browser collection",
+                }
             result = compare(pp, fd)
-            result["source"] = "browser"
+            result["source"] = source_info["source"]
+            result["source_info"] = source_info
             if not result["opportunities"]:
                 raise CollectionError(
                     "Both sources returned data, but no fresh exact-line, full-game matches passed validation. Last successful snapshot retained."
