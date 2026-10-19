@@ -1,330 +1,125 @@
-# PropShop - Sports Betting Edge Analyzer
+# PropShop
 
-A full-stack web application that identifies positive expected value (+EV) betting opportunities by analyzing PrizePicks prop lines against FanDuel market odds. The system uses automated daily scraping, statistical analysis, and an interactive dashboard to surface profitable betting edges.
+A React dashboard for comparing standard PrizePicks player projections with FanDuel two-sided player-prop odds. Python collects public board responses, validates exact market matches, removes the bookmaker margin, and publishes a snapshot served by Express.
 
-## Overview
+## Current state (October 19, 2026)
 
-PropShop compares PrizePicks projections with FanDuel's no-vig probabilities to identify bets where your expected win rate exceeds the minimum threshold for profitability. The application features a modern React dashboard with real-time filtering, search capabilities, and manual line adjustment tools.
+The analysis, snapshot pipeline, API lifecycle, and React production build have automated/local validation. **Live end-to-end collection has not been verified.** PrizePicks' direct public endpoint returned HTTP 403. The ordinary browser board loaded in one session, but the separate scraper browser was restricted after manual verification. No successful live snapshot was produced, and no real profitable bets are claimed.
 
-## Architecture
+The collection adapters need validation against successful current source responses once access is restored. They intentionally stop rather than disguise the browser, simulate location, solve challenges, or invent data. Having Playwright installed does not guarantee either site permits the browser session.
 
-The system uses a batch processing architecture that runs once daily at midnight PST:
+## Run locally
 
-- **Daily Scraper**: Automated Python script that collects data from PrizePicks and FanDuel
-- **File Storage**: Results stored in JSON format for instant dashboard access
-- **Node.js Backend**: Express server that serves pre-computed opportunities
-- **React Frontend**: Interactive dashboard with filtering, search, and manual editing features
-- **Cron Automation**: Scheduled midnight runs with manual override capability
-
-Data is not live - the dashboard displays opportunities from the most recent daily scrape. This design prioritizes instant page loads and minimizes API costs over real-time updates.
-
-## Key Features
-
-### Data Collection
-- Automated web scraping using Playwright browser automation
-- Collects PrizePicks projections and FanDuel market odds
-- Processes 400+ player props across NBA, NFL, MLB, and NHL
-- Calculates no-vig probabilities to remove bookmaker margin
-- Identifies qualifying bet types based on edge thresholds
-
-### Dashboard Interface
-- Sport-specific filtering (NBA, NFL, MLB, NHL)
-- Player name search with live filtering
-- Sortable columns (edge, player, line)
-- Edge-based filtering with adjustable threshold slider
-- Manual line editing with real-time edge recalculation
-- Data freshness indicators and stale data warnings
-- Color-coded sport badges and edge indicators
-
-### Analysis Engine
-- Calculates true win probabilities from FanDuel odds
-- Compares against PrizePicks bet type thresholds
-- Identifies optimal betting strategies (2-6 pick parlays)
-- Computes expected edge for each opportunity
-- Supports both Power Play and Flex Play bet types
-
-### Automation
-- Cron job scheduled for midnight PST daily runs
-- Manual trigger endpoint for on-demand updates
-- Graceful error handling with detailed logging
-- Automatic data persistence between runs
-- Manual override when automation fails
-
-## Installation
-
-### Prerequisites
-- Python 3.8 or higher
-- Node.js 14 or higher
-- npm or yarn package manager
-
-### Setup Instructions
-
-1. Clone the repository:
-   ```bash
-   git clone <repository-url>
-   cd propshop
-   ```
-
-2. Install Python dependencies:
-   ```bash
-   python3 -m venv venv
-   source venv/bin/activate
-   pip install playwright asyncio fastapi uvicorn
-   playwright install chromium
-   ```
-
-3. Install Node.js dependencies:
-   ```bash
-   cd server
-   npm install
-   cd ../client
-   npm install
-   cd ..
-   ```
-
-4. Set up the automated cron job:
-   ```bash
-   ./setup_cron.sh
-   ```
-
-## Usage
-
-### Starting the Dashboard
-
-Terminal 1 - Start the Node.js backend:
-```bash
-cd server
-npm start
-```
-
-Terminal 2 - Start the React frontend:
-```bash
-cd client
-npm start
-```
-
-The dashboard will be available at `http://localhost:3000`
-
-### Manual Data Collection
-
-To manually run the scraper and update data:
-```bash
-python daily_scraper.py
-```
-
-This will overwrite the existing data file with fresh opportunities. Use this when the automated cron job fails or when you want to update data outside the scheduled time.
-
-### Command Line Analysis
-
-For terminal-based analysis without the dashboard:
-```bash
-python main.py
-```
-
-## Project Structure
-
-```
-propshop/
-├── daily_scraper.py           # Automated batch scraper
-├── main.py                    # CLI tool and FastAPI server (deprecated)
-├── prizepicks_scraper.py      # PrizePicks data collection
-├── fanduel_scraper.py         # FanDuel odds scraping
-├── setup_cron.sh              # Cron job installation script
-├── server/
-│   └── server.js              # Express API server
-├── client/
-│   ├── src/
-│   │   ├── App.js             # Main React component
-│   │   ├── components/
-│   │   │   ├── OpportunityTable.js
-│   │   │   └── StatsCard.js
-│   │   └── App.css
-│   └── package.json
-└── data/
-    └── opportunities.json      # Scraped opportunities (gitignored)
-```
-
-## How It Works
-
-### Data Collection Pipeline
-
-1. **PrizePicks Scraper**: Intercepts API calls to capture projection data including player names, stats, and lines
-2. **FanDuel Scraper**: Searches for corresponding players and extracts over/under odds for each prop
-3. **Probability Calculation**: Removes bookmaker vig to calculate true no-vig probabilities
-4. **Edge Analysis**: Compares win probabilities against PrizePicks bet type thresholds
-5. **Opportunity Detection**: Identifies bets where expected edge exceeds zero
-6. **Data Formatting**: Structures results with sport detection and bet recommendations
-7. **File Storage**: Saves to JSON for instant dashboard access
-
-### Bet Type Analysis
-
-The system evaluates nine different PrizePicks bet structures:
-
-**Power Play Bets** (all picks must hit):
-- 2-Pick: 57.74% win rate needed, 3x payout
-- 3-Pick: 55.05% win rate needed, 6x payout
-- 4-Pick: 56.23% win rate needed, 10x payout
-- 5-Pick: 54.93% win rate needed, 20x payout
-- 6-Pick: 54.66% win rate needed, 37.5x payout
-
-**Flex Play Bets** (allows one miss):
-- 3-Pick: 57.74% win rate needed, 3x payout
-- 4-Pick: 55.04% win rate needed, 6x payout
-- 5-Pick: 54.26% win rate needed, 10x payout
-- 6-Pick: 54.21% win rate needed, 25x payout
-
-### Manual Line Adjustment
-
-The dashboard allows manual line editing to account for market movements throughout the day. When you edit a line:
-
-1. The system estimates the new win probability using a linear approximation
-2. Each 1% line change affects win probability by approximately 2%
-3. Edge is recalculated based on the adjusted probability
-4. Changes are reflected immediately without re-scraping
-
-This feature is approximate and intended for quick what-if analysis rather than precise calculations.
-
-## Configuration
-
-### Cron Job Schedule
-
-By default, the scraper runs at midnight PST (8 AM UTC). To modify:
+Requires Python 3.9+, Node 20+, npm, and a Playwright Chromium installation.
 
 ```bash
-crontab -e
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python -m playwright install chromium
+npm ci --prefix server
+npm ci --prefix client
+npm run build --prefix client
+PROPSHOP_HEADED=1 node server/server.js
 ```
 
-Adjust the time in the cron expression:
-```
-0 8 * * * cd /path/to/propshop && /path/to/venv/bin/python daily_scraper.py >> logs/scraper.log 2>&1
-```
+Open http://localhost:3001. The API serves the built React app. `PORT=3011` selects a different port if needed. The server binds to loopback; this is a local tool with no public authentication system.
 
-### Data Freshness
+Click **Collect fresh lines** to launch the collector. Set `PROPSHOP_HEADED=1` to show the browser. If a site requests human verification, complete it yourself. If it restricts access after verification, stop and resolve access with the source. Repeated challenges are not a reliability strategy.
 
-The dashboard displays a warning when data is more than 24 hours old. Lines can move significantly in that time, so stale data should be refreshed before making betting decisions.
+For frontend development, start the API on port 3001 and run `npm start --prefix client` in another terminal. React's development proxy targets port 3001.
 
-## API Endpoints
+Run collection directly:
 
-The Node.js server exposes the following endpoints:
-
-- `GET /api/opportunities` - Returns all +EV opportunities
-- `GET /api/stats` - Returns aggregate statistics
-- `POST /api/trigger-scrape` - Manually triggers the scraper
-- `GET /health` - Server health check
-
-## Technical Details
-
-### Technologies Used
-
-**Backend:**
-- Python 3.12 with asyncio for concurrent scraping
-- Playwright for browser automation
-- Express.js for API server
-- JSON file storage
-
-**Frontend:**
-- React 18.2.0 with hooks
-- Axios for HTTP requests
-- CSS3 with gradient styling
-- Responsive design patterns
-
-**Automation:**
-- Unix cron for scheduling
-- Bash scripts for setup
-- Process spawning for manual triggers
-
-### Browser Automation
-
-Scrapers run in visible browser mode to handle CAPTCHAs and avoid bot detection. The system includes:
-
-- User agent spoofing
-- Navigator property overrides
-- Cookie banner handling
-- Geo-location simulation (California)
-- Rate limiting with delays
-
-### Data Format
-
-Opportunities are stored in the following JSON structure:
-
-```json
-{
-  "opportunities": [
-    {
-      "id": 1,
-      "player": "Player Name",
-      "sport": "NBA",
-      "stat": "Points",
-      "line": 25.5,
-      "direction": "over",
-      "odds": -120,
-      "no_vig_win_pct": 55.5,
-      "edge": 1.3,
-      "best_bet_type": "6-Pick Flex",
-      "payout": 25,
-      "all_qualifying_bets": [...]
-    }
-  ],
-  "stats": {
-    "total_scanned": 398,
-    "plus_ev_found": 30,
-    "conversion_rate": 7.54,
-    "avg_edge": 1.48,
-    "best_edge": 4.36
-  },
-  "last_updated": "2025-12-27T00:15:23Z",
-  "date": "2025-12-27"
-}
+```bash
+.venv/bin/python daily_scraper.py --headed --sports NBA,NFL,MLB,NHL
 ```
 
-## Known Limitations
+Configuration uses exported environment variables, not automatic `.env` loading:
 
-### CAPTCHA Challenges
+| Variable | Purpose |
+| --- | --- |
+| `PROPSHOP_HEADED=1` | Show the ordinary collection browser |
+| `PROPSHOP_SPORTS=NBA,NFL` | Limit league navigation |
+| `PYTHON=/absolute/path/to/python` | Override the collector interpreter; otherwise `.venv/bin/python`, then `python3` |
+| `PROPSHOP_DATA_DIR=/absolute/path` | Override snapshot/status location |
+| `PROPSHOP_SAVE_RAW=1` | Save public JSON payloads in ignored `data/raw/` for parser debugging |
+| `PORT=3001` | API/static dashboard port |
 
-Betting sites actively prevent automated scraping using CAPTCHAs. The automated cron job may fail to complete, requiring manual intervention. When this happens, you can run the scraper manually and solve CAPTCHAs in the visible browser window.
+CLI options also include `--timeout` (1–300 seconds for the initial PrizePicks response) and `--max-events` (1–100 events per league; default 20). The API terminates collection after ten minutes. No schedule is installed automatically. Daily-only collection is insufficient to keep a 15-minute snapshot fresh.
 
-### Processing Time
+## Comparison rules
 
-Scraping all 400+ players takes 15-25 minutes due to rate limiting and browser interactions. The batch processing architecture means you'll see yesterday's edges rather than live opportunities.
+A match requires the same league, normalized player name, explicit stat alias, numeric line, full-game period, and timezone-aware event start time. Different start times are deliberately unmatched; they need source event-ID reconciliation rather than a guessed association. Ambiguous matches, incomplete odds, unknown periods/stats, started games, modified PrizePicks projections, and observations older than 15 minutes are excluded.
 
-### Line Movement
+Both FanDuel prices must be available at the exact PrizePicks line. American prices are converted to implied probabilities, then normalized:
 
-Sports betting lines move constantly based on betting activity and news. Data from midnight may not reflect current market conditions. Use the manual line editing feature to adjust for known changes.
+```text
+no_vig_over = implied_over / (implied_over + implied_under)
+no_vig_under = 1 - no_vig_over
+```
 
-## Important Notes
+These are **market probability estimates**, not measured true win rates. Integer lines are excluded because ties require a separate settlement/push model. There is no invented probability adjustment when a line changes: obtain fresh matching odds instead.
 
-**Legal Disclaimer**: This tool is for educational and analytical purposes only. Ensure sports betting is legal in your jurisdiction before use. The software does not place bets or handle money directly.
+## Edge and payouts
 
-**Not Financial Advice**: Past edge does not guarantee future profits. Sports betting involves risk and this analysis does not account for all factors that affect outcomes.
+Each selectable entry model has an equal-leg break-even probability calculated from its complete payout table. For Power entries only an all-hit outcome pays. Flex calculations include every partial-hit payout, including payouts below the original entry fee.
 
-**Rate Limiting**: Respect website terms of service. The scrapers include delays to avoid overwhelming servers.
+```text
+edge (percentage points) = no-vig win percentage - entry-model break-even percentage
+illustrative entry ROI = expected payout for n independent, equally likely legs - 1
+```
 
-**Geo-Restrictions**: PrizePicks and FanDuel have location restrictions. You may need to be in supported jurisdictions to access their sites.
+The ROI column is an illustration for an entire entry whose legs all have the displayed probability. It is **not** the return of one prop, a selected real lineup, or a guaranteed profit. Actual unequal-leg entries can be evaluated with `analysis.expected_return`, which assumes independence. This project does not estimate correlations, validate lineup eligibility, model leaderboard winnings, or account for DNPs/reboots/promotions.
 
-## Future Enhancements
+Standard Player Picks minimum-guarantee payouts were checked against [PrizePicks Potential Outcomes](https://www.prizepicks.com/help-center/potential-outcomes) on October 19, 2026. Verify the actual payout shown in your account. The model excludes Team/Culture picks, Early Payout, discounted/Goblin/Demon projections, and leaderboard prizes.
 
-Potential improvements for production deployment:
+## Reliability
 
-- Integration with The Odds API for instant, CAPTCHA-free data access
-- Database storage (PostgreSQL) for historical tracking
-- Authentication system for multi-user access
-- Bet tracking and performance analytics
-- Mobile-responsive design improvements
-- Push notifications for high-edge opportunities
-- Bankroll management and Kelly Criterion integration
+- One HTTP response per collection trigger; clients poll explicit job state.
+- In-process API lock plus a POSIX file lock for CLI/cron overlap.
+- A failed collection preserves the last successful snapshot.
+- Writes use a temporary file and atomic replacement.
+- Versioned snapshots reject legacy/fake result formats.
+- Expired observations and started games are hidden on every API read.
+- Empty/unavailable data never falls back to fake bets.
+- Browser adapters use normal Playwright Chromium with no stealth scripts, fake geolocation, or automated challenge interaction.
+- The API has a ten-minute collection deadline. The standalone CLI has per-navigation/initial-response timeouts.
 
-## Contributing
+The browser parser supports known PrizePicks JSON projections and FanDuel event/market attachments. FanDuel navigation is bounded by `--max-events` and may not load all player markets or lazy-loaded tabs. Changed response schemas, blocked requests, missing player tabs, and inconsistent event times can result in no accepted matches. This is reported as a failure, not a fresh empty success.
 
-This project is maintained as a portfolio piece. Suggestions and improvements are welcome through pull requests or issues.
+## API
 
-## License
+| Endpoint | Response |
+| --- | --- |
+| `GET /health` | Server health |
+| `GET /api/opportunities` | Fresh comparisons, summary, snapshot timestamp, collection state |
+| `GET /api/opportunities/:id` | Fresh row or 404 |
+| `GET /api/stats` | Summary of currently eligible matches |
+| `POST /api/trigger-scrape` | 202 accepted, 409 already running, or explicit failure |
+| `GET /api/scrape-status` | `idle`, `running`, `succeeded`, `failed`, or `interrupted` |
 
-This project is for personal and educational use. All rights reserved.
+## Verification
 
-## Acknowledgments
+```bash
+python3 -m unittest discover -s tests -v
+node --test server/server.test.js
+npm run build --prefix client
+```
 
-Built with Playwright for web scraping, React for the frontend, and Express.js for the API layer. Inspired by sports analytics and advantage play communities.
+Python tests use synthetic fixtures explicitly constructed in the test files. They cover string odds, invalid prices, no-vig normalization, full Flex payout math, exact-market matching, ambiguity, stale timestamps, modified projections, and preservation of prior snapshots after failure. API tests exercise job locking, launch failure, expiry, missing rows, and cross-site trigger rejection. Passing these tests does not validate current live source compatibility.
 
----
+## Files
 
-**Risk Warning**: Sports betting involves financial risk. This tool provides analysis but does not guarantee profits. Always bet responsibly and within your means. Past performance does not indicate future results.
+- `collectors.py`: public browser collection and strict source parsers
+- `analysis.py`: market normalization, no-vig calculation, payout models, comparison
+- `daily_scraper.py`: locking, collection status, atomic snapshot publishing
+- `server/server.js`: API and built React hosting
+- `client/src/`: dashboard, filters, sorting, status and methodology
+- `tests/`, `server/server.test.js`: deterministic verification
+- `data/`: ignored runtime snapshots and diagnostics
+
+The repository inherited tracked `node_modules/` directories. `.gitignore` now prevents newly untracked dependencies; removing already-tracked dependency trees is separate repository housekeeping. Install from package lockfiles for reproducibility.
+
+## Next step for live data
+
+Restore permitted source access and capture successful public responses, then validate the adapters against them. A licensed provider with verified PrizePicks **and** FanDuel player-prop coverage is an alternative; no provider subscription, coverage, or integration is assumed here.

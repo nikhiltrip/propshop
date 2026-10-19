@@ -14,3 +14,13 @@ ENV/
 # Data and logs
 data/
 logs/
+
+# Dependencies and local configuration
+node_modules/
+client/build/
+.env
+.env.*
+!.env.example
+playwright-report/
+
+.pycache/

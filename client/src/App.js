@@ -1,139 +1,177 @@
-import React, { useState, useEffect } from 'react';
-import axios from 'axios';
-import './App.css';
-import OpportunityTable from './components/OpportunityTable';
-import StatsCard from './components/StatsCard';
+import React, { useEffect, useState } from "react";
+import "./App.css";
+import OpportunityTable from "./components/OpportunityTable";
 
-function App() {
-  const [opportunities, setOpportunities] = useState([]);
-  const [stats, setStats] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [lastUpdated, setLastUpdated] = useState(null);
-  const [error, setError] = useState(null);
-  const [isStale, setIsStale] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-
-  const fetchData = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      const [oppsResponse, statsResponse] = await Promise.all([
-        axios.get('/api/opportunities'),
-        axios.get('/api/stats')
-      ]);
-
-      setOpportunities(oppsResponse.data.opportunities);
-      setLastUpdated(oppsResponse.data.last_updated);
-      setStats(statsResponse.data.stats);
-      setIsStale(oppsResponse.data.is_stale || false);
-    } catch (err) {
-      setError('Failed to fetch data. Make sure the server is running on port 3001.');
-      console.error('Error fetching data:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const triggerManualScrape = async () => {
-    if (refreshing) return;
-    
-    try {
-      setRefreshing(true);
-      setError(null);
-      
-      await axios.post('/api/trigger-scrape');
-      
-      // Poll for completion (check every 5 seconds for 5 minutes max)
-      let attempts = 0;
-      const maxAttempts = 60; // 5 minutes
-      
-      const pollInterval = setInterval(async () => {
-        attempts++;
-        
-        try {
-          const response = await axios.get('/api/opportunities');
-          if (!response.data.is_stale || attempts >= maxAttempts) {
-            clearInterval(pollInterval);
-            setRefreshing(false);
-            fetchData();
-          }
-        } catch (e) {
-          // Keep polling
-        }
-        
-        if (attempts >= maxAttempts) {
-          clearInterval(pollInterval);
-          setRefreshing(false);
-          setError('Scraping took too long. Check back in a few minutes.');
-        }
-      }, 5000);
-      
-    } catch (err) {
-      setRefreshing(false);
-      setError('Failed to trigger data refresh: ' + err.message);
-    }
-  };
-
+export default function App() {
+  const [data, setData] = useState(null);
+  const [job, setJob] = useState({ state: "idle" });
+  const [error, setError] = useState("");
+  const [starting, setStarting] = useState(false);
   useEffect(() => {
-    fetchData();
-    
-    // Check for updates every 30 seconds (just to show if data changed)
-    const interval = setInterval(fetchData, 30000);
-    return () => clearInterval(interval);
+    let alive = true;
+    let active = false;
+    const load = async () => {
+      if (active) return;
+      active = true;
+      try {
+        const response = await fetch("/api/opportunities");
+        if (!response.ok) throw new Error("API unavailable");
+        const result = await response.json();
+        if (alive) {
+          setData(result);
+          setJob(result.collection);
+          setError("");
+        }
+      } catch (e) {
+        if (alive)
+          setError("Cannot reach the API. Start the server and try again.");
+      } finally {
+        active = false;
+      }
+    };
+    load();
+    const timer = setInterval(load, 3000);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
   }, []);
-
+  async function collect() {
+    setStarting(true);
+    try {
+      const response = await fetch("/api/trigger-scrape", { method: "POST" });
+      const result = await response.json();
+      if (!response.ok && response.status !== 409)
+        throw new Error(result.message || "Could not start collection.");
+      setJob(result.collection);
+      setError("");
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setStarting(false);
+    }
+  }
+  const busy = starting || job.state === "running";
+  const rows = data?.opportunities || [];
   return (
-    <div className="App">
-      <header className="App-header">
-        <div className="header-content">
-          <div>
-            <h1>💰 PropShop</h1>
-            <p className="subtitle">+EV Sports Betting Opportunities</p>
-          </div>
-          {isStale && (
-            <button className="refresh-btn warning" onClick={triggerManualScrape} disabled={refreshing}>
-              {refreshing ? '⏳ Scraping (2-3 min)...' : '⚠️ Refresh Stale Data'}
-            </button>
-          )}
-        </div>
-        {isStale && (
-          <div className="stale-banner">
-            ⚠️ Data is more than 24 hours old. Lines may have moved. Click "Refresh Stale Data" to update.
-          </div>
-        )}
+    <div className="app-shell">
+      <header>
+        <a className="brand" href="/">
+          p<span>/</span> PropShop
+        </a>
+        <span className="header-note">PRIZEPICKS × FANDUEL</span>
+        <span className={`status ${rows.length ? "connected" : ""}`}>
+          {rows.length ? "Snapshot available" : "Awaiting data"}
+        </span>
       </header>
-
-      <main className="main-content">
+      <main>
+        <div className="intro">
+          <div>
+            <p className="eyebrow">THE PROP BOARD</p>
+            <h1>Find the difference.</h1>
+            <p className="muted">
+              Exact lines. Two-sided odds. A clearer view of the market.
+            </p>
+          </div>
+          <button className="primary" onClick={collect} disabled={busy}>
+            {busy ? "Collecting sources…" : "↻ Collect fresh lines"}
+          </button>
+        </div>
+        <div className="source-strip">
+          <span>
+            <i className="dot pp" />
+            PrizePicks projections
+          </span>
+          <span>compared with</span>
+          <span>
+            <i className="dot fd" />
+            FanDuel no-vig probabilities
+          </span>
+          <span className="timestamp">
+            {data?.last_updated
+              ? `Last snapshot ${new Date(data.last_updated).toLocaleString()}`
+              : "No successful collection yet"}
+          </span>
+        </div>
         {error && (
-          <div className="error-banner">
-            ⚠️ {error}
+          <div className="notice error" role="alert">
+            {error}
           </div>
         )}
-
-        {stats && <StatsCard stats={stats} lastUpdated={lastUpdated} />}
-
-        {loading && !opportunities.length ? (
-          <div className="loading-state">
-            <div className="spinner"></div>
-            <p>Scanning for opportunities...</p>
-          </div>
-        ) : opportunities.length > 0 ? (
-          <OpportunityTable opportunities={opportunities} />
-        ) : (
-          <div className="empty-state">
-            <h2>No +EV Opportunities Found</h2>
-            <p>Keep checking back - opportunities appear throughout the day!</p>
+        {(job.state === "failed" || job.state === "interrupted") && (
+          <div className="notice warning" role="alert">
+            <strong>Collection needs attention. </strong>
+            {job.message}
           </div>
         )}
+        {busy && (
+          <div className="notice" role="status">
+            Collecting both boards. If a visible browser requests verification,
+            complete it manually. Results appear when the collection finishes.
+          </div>
+        )}
+        {data?.is_stale && data.last_updated && (
+          <div className="notice warning">
+            Snapshot expired. Comparisons older than 15 minutes are hidden.
+          </div>
+        )}
+        <section className="metrics" aria-label="Collection summary">
+          <div>
+            <span>PrizePicks collected</span>
+            <strong>{data?.stats?.prizepicks_collected ?? "—"}</strong>
+            <small>Last successful run</small>
+          </div>
+          <div>
+            <span>FanDuel collected</span>
+            <strong>{data?.stats?.fanduel_collected ?? "—"}</strong>
+            <small>Two-sided markets</small>
+          </div>
+          <div>
+            <span>Fresh exact matches</span>
+            <strong>{data?.stats?.total_scanned ?? 0}</strong>
+            <small>Same player, stat, line & start</small>
+          </div>
+          <div>
+            <span>Above model break-even</span>
+            <strong className="green">{data?.stats?.plus_ev_found ?? 0}</strong>
+            <small>Best qualifying entry model</small>
+          </div>
+        </section>
+        <OpportunityTable opportunities={rows} loading={!data && !error} />
+        <details className="method">
+          <summary>How to read this board</summary>
+          <p>
+            FanDuel implied over and under probabilities are normalized to
+            remove the margin. This is a market estimate, not a measured win
+            rate. Edge is the difference in percentage points between that
+            estimate and the selected entry model’s break-even rate.
+          </p>
+          <p>
+            Illustrative entry ROI assumes every leg has the displayed
+            probability and all legs are independent. It is not the expected
+            return of one pick or a recommended lineup. Actual payouts,
+            correlation, promotions and settlement rules can change the result.
+            Integer lines, modified projections, started events and unknown
+            markets are excluded.
+          </p>
+          <p>
+            Models use standard Player Picks minimum-guarantee payouts,
+            including partial Flex payouts, verified October 19, 2026. Check the
+            actual entry payout before relying on a model.{" "}
+            <a
+              href="https://www.prizepicks.com/help-center/potential-outcomes"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Payout source ↗
+            </a>
+          </p>
+        </details>
+        <footer>
+          Snapshots refresh when collection succeeds. Prices can move between
+          collection and review. No guaranteed profits.
+        </footer>
       </main>
-
-      <footer className="App-footer">
-        <p>Built with Python (Analysis Engine) + Node.js + React</p>
-        <p className="disclaimer">⚠️ For educational purposes only. Gamble responsibly.</p>
-      </footer>
     </div>
   );
 }
-
-export default App;

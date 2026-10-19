@@ -1,45 +1,27 @@
-#!/bin/bash
-# Setup script for PropShop daily cron job
-
-echo "🔧 PropShop Cron Job Setup"
-echo "=========================="
-echo ""
-
-# Get the directory where this script is located
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-PYTHON_PATH="$SCRIPT_DIR/venv/bin/python"
-SCRAPER_PATH="$SCRIPT_DIR/daily_scraper.py"
-LOG_PATH="$SCRIPT_DIR/logs/scraper.log"
-
-# Create logs directory
-mkdir -p "$SCRIPT_DIR/logs"
-
-# Create the cron command (midnight PST = 8 AM UTC)
-CRON_CMD="0 8 * * * cd $SCRIPT_DIR && $PYTHON_PATH $SCRAPER_PATH >> $LOG_PATH 2>&1"
-
-echo "This will add the following cron job:"
-echo "$CRON_CMD"
-echo ""
-echo "This runs the scraper every day at midnight PST (8 AM UTC)"
-echo ""
-read -p "Do you want to proceed? (y/n) " -n 1 -r
-echo ""
-
-if [[ $REPLY =~ ^[Yy]$ ]]
-then
-    # Add to crontab
-    (crontab -l 2>/dev/null; echo "$CRON_CMD") | crontab -
-    
-    echo "✅ Cron job added successfully!"
-    echo ""
-    echo "To verify, run: crontab -l"
-    echo "To remove, run: crontab -e (and delete the line)"
-    echo ""
-    echo "Logs will be saved to: $LOG_PATH"
-    echo ""
-    echo "💡 To test manually, run:"
-    echo "   $PYTHON_PATH $SCRAPER_PATH"
-else
-    echo "❌ Setup cancelled"
-    exit 1
+#!/usr/bin/env bash
+set -euo pipefail
+TASK_ROOT="$(cd "$(dirname "$0")" && pwd)"
+# Use the scheduler's local timezone. 08:00 UTC is not always midnight Pacific.
+PYTHON_BIN="$TASK_ROOT/.venv/bin/python"
+if [[ ! -x "$PYTHON_BIN" ]]; then
+  echo 'Create .venv and install requirements.txt first.' >&2
+  exit 1
+fi
+if [[ "$TASK_ROOT" == *"'"* || "$TASK_ROOT" == *'%'* ]]; then
+  echo 'Cron setup does not support paths containing quotes or percent signs.' >&2
+  exit 1
+fi
+mkdir -p "$TASK_ROOT/logs"
+TASK_CRON="0 0 * * * cd '$TASK_ROOT' && '$PYTHON_BIN' daily_scraper.py >> '$TASK_ROOT/logs/scraper.log' 2>&1 # propshop-daily"
+echo 'Live collection requires restored source access. A daily snapshot expires after 15 minutes.'
+echo 'This optional job runs at midnight in the cron daemon timezone, without a visible browser.'
+printf '%s\n' "$TASK_CRON"
+read -r -p 'Install this optional cron job? [y/N] ' response
+if [[ "$response" == 'y' || "$response" == 'Y' ]]; then
+  if crontab -l 2>/dev/null | grep -Fq '# propshop-daily'; then
+    echo 'A PropShop cron job already exists. Inspect crontab -e to change it.'
+    exit 0
+  fi
+  { crontab -l 2>/dev/null || true; printf '%s\n' "$TASK_CRON"; } | crontab -
+  echo 'Installed. Inspect with crontab -l.'
 fi
