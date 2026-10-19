@@ -71,7 +71,49 @@ Power models include the all-hit payout. Flex models include every partial-hit p
 
 Entry ROI describes an entire hypothetical entry whose legs all have the displayed probability. It is not one prop's expected return, a selected real lineup, or a guarantee. The project does not model correlations, actual entry eligibility, leaderboard payouts, account-specific offers, DNPs/reboots, or Early Payout.
 
-Standard Player Picks minimum-guarantee payouts were checked against [PrizePicks Potential Outcomes](https://www.prizepicks.com/help-center/potential-outcomes) on October 19, 2026. Verify the actual payout shown in your account. Modified projections are not validated by the public feed and must not be treated as certified standard-payout picks.
+### Verified PrizePicks payout schedules
+
+**Last manually verified: October 19, 2026 (America/Los_Angeles).** Official references: [Payouts](https://www.prizepicks.com/help-center/payouts) and [Potential Outcomes](https://www.prizepicks.com/help-center/potential-outcomes); both pages displayed an October 19, 2026 update date when checked.
+
+The following table is the **standard Player Picks minimum-guarantee schedule** modeled in `analysis.PAYOUTS`. All omitted hit counts return 0x. Multipliers describe total returned relative to the entry fee: a $10 entry returning 3x pays $30 total ($20 net profit); 1x returns the entry fee, and 0.4x returns $4 ($6 net loss).
+
+| Entry model | Payout by number of correct picks | Equal-leg break-even probability |
+| --- | --- | ---: |
+| 2-Pick Power | 2/2: 3x | 57.7350% |
+| 3-Pick Power | 3/3: 6x | 55.0321% |
+| 4-Pick Power | 4/4: 10x | 56.2341% |
+| 5-Pick Power | 5/5: 20x | 54.9280% |
+| 6-Pick Power | 6/6: 37.5x | 54.6590% |
+| 2-Pick Flex | 2/2: 2x; 1/2: 0.5x | 61.8034% |
+| 3-Pick Flex | 3/3: 3x; 2/3: 1x | 57.7350% |
+| 4-Pick Flex | 4/4: 6x; 3/4: 1.5x | 55.0321% |
+| 5-Pick Flex | 5/5: 10x; 4/5: 2x; 3/5: 0.4x | 54.2525% |
+| 6-Pick Flex | 6/6: 25x; 5/6: 2x; 4/6: 0.4x | 54.2060% |
+
+**These probabilities are calculated by PropShop, not quoted by PrizePicks.** They solve `expected total return = 1` assuming every leg has the same win probability, legs are independent, and only the listed payout schedule applies. They are not a player's hit rate or a price offered on an individual prop. Figures are rounded for display; the engine uses the calculated unrounded thresholds.
+
+For Power, `p = multiplier ** (-1 / pick_count)`. For Flex, PropShop includes every outcome in `sum(C(n,k) * p**k * (1-p)**(n-k) * payout[k]) = 1`. Looking only at Flex's all-hit multiplier produces the wrong threshold.
+
+### When the standard table does not apply
+
+PrizePicks' [Payouts explanation](https://www.prizepicks.com/help-center/payouts) says entry-specific amounts can differ because of promotions, bonus lineups, pick combinations, special projections, mixed Player/Team entries, and other disclosed factors. DNPs, Reboots and ties can also change settlement. **The payout schedule displayed for the actual entry controls; this table does not verify account-specific eligibility or payout.**
+
+[Demons and Goblins](https://www.prizepicks.com/demons-and-goblins) can alter payouts in either direction. Do not reuse a standard threshold for a modified entry without its complete payout schedule. The public odds feed does not certify projection modifiers.
+
+[Leaderboard winnings](https://www.prizepicks.com/help-center/potential-outcomes) are separate from the modeled minimum guarantee: the published standard six-pick leaderboard amounts are 25x Power and 12.5x Flex, versus the minimum-guarantee all-hit amounts of 37.5x and 25x above. Leaderboard ties can split prizes; eligible awards use the higher amount, not their sum. PropShop does not estimate leaderboard returns.
+
+### Keeping the numbers current
+
+Payout verification is manual. **Collect fresh lines refreshes source lines and sportsbook prices; it does not recheck PrizePicks' payout rules.**
+
+When a published standard schedule changes:
+
+1. Recheck both official sources above and the actual product/entry details; record the verification date and applicable schedule.
+2. Update the complete hit-count mapping in `analysis.PAYOUTS`, including partial Flex returns. Do not change only the top multiplier or paste a rounded break-even percentage.
+3. Recalculate the README table from `analysis.BET_TYPES`. `threshold()` derives break-even probabilities from the full mapping.
+4. Run `python3 -m unittest discover -s tests -v`, then collect a new snapshot. Saved snapshots contain their calculated models; reading an old snapshot does not recalculate it after a payout-code change.
+
+This review confirmed the existing modeled schedules; no payout constant needed changing on October 19, 2026.
 
 ## Optional direct browser adapters
 
