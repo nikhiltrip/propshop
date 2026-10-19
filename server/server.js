@@ -34,6 +34,10 @@ function snapshot(now = Date.now()) {
     success: true,
     opportunities: rows,
     count: rows.length,
+    unmatched: stale ? [] : (data.unmatched || []).filter(
+      (row) => fresh(row.observed_at, now) && Date.parse(row.start_time) > now,
+    ),
+    payout_verification: valid ? data.payout_verification : null,
     is_stale: stale,
     last_updated: valid ? data.last_updated : null,
     source: valid ? data.source : null,

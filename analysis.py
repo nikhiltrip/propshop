@@ -7,6 +7,7 @@ import re
 import unicodedata
 from datetime import datetime, timezone
 
+PAYOUT_VERIFIED_AT = "2026-10-19"
 PAYOUT_SOURCE = "https://www.prizepicks.com/help-center/potential-outcomes"
 # Standard Player Picks minimum guarantee, verified 2026-10-19.
 PAYOUTS = {
@@ -66,6 +67,30 @@ ALIASES = {
     "hits": ["hits", "batter_hits"],
     "shots_on_goal": ["shots on goal", "player_shots_on_goal"],
     "saves": ["goalie saves", "saves", "player_total_saves"],
+    "goals": ["goals"],
+    "blocked_shots": ["blocked shots", "blocked-shots"],
+    "completions": ["completions", "pass completions", "passing completions"],
+    "pass_attempts": ["pass attempts", "passing attempts"],
+    "rush_attempts": ["rush attempts", "rushing attempts", "rush atts"],
+    "passing_tds": ["passing tds", "pass tds", "passing touchdowns"],
+    "interceptions": ["interceptions", "interceptions thrown", "ints"],
+    "kicking_points": ["kicking points", "kicker points"],
+    "longest_completion": ["longest completion", "longest pass"],
+    "longest_reception": ["longest reception"],
+    "longest_rush": ["longest rush"],
+    "passing_rushing_yards": ["passing & rushing yards", "pass+rush yds"],
+    "rushing_receiving_yards": ["rushing & receiving yards", "rush+rec yds"],
+    "touchdowns": ["touchdowns", "rush+rec tds"],
+    "earned_runs_allowed": ["earned runs allowed", "earned runs"],
+    "hits_runs_rbis": ["hits, runs & rbis", "hits+runs+rbis"],
+    "hits_allowed": ["hits allowed"],
+    "home_runs": ["home runs"],
+    "outs": ["outs", "pitching outs", "pitcher outs"],
+    "runs_batted_in": ["runs batted in", "rbis"],
+    "singles": ["singles"],
+    "steals": ["steals", "stolen bases"],
+    "total_bases": ["total bases"],
+    "walks_allowed": ["walks allowed"],
 }
 STAT_LOOKUP = {
     normalize(alias): key
@@ -179,7 +204,7 @@ def compare(prizepicks, fanduel, now=None, max_age_seconds=900):
             ).append(row)
         except (KeyError, TypeError, ValueError):
             rejected += 1
-    results, seen = [], set()
+    results, seen, unmatched = [], set(), []
     for pp in prizepicks:
         try:
             key = match_key(pp)
@@ -190,8 +215,17 @@ def compare(prizepicks, fanduel, now=None, max_age_seconds=900):
                 or parse_time(pp["start_time"]) <= now
             ):
                 raise ValueError("Old or nonstandard projection")
+            def without_estimate(reason):
+                unmatched.append({
+                    "id": hashlib.sha256(repr(key).encode()).hexdigest()[:16],
+                    "player": pp["player"], "sport": pp["sport"],
+                    "stat": pp["stat"], "line": float(pp["line"]),
+                    "start_time": pp["start_time"], "observed_at": pp["observed_at"],
+                    "reason": reason,
+                })
             # Integer lines need a push/void model. Do not pretend P(win | no tie) is P(win).
             if float(pp["line"]).is_integer():
+                without_estimate("Integer line: tie/settlement probabilities are not modeled.")
                 raise ValueError("Push model required")
             candidate_groups = index.get(key, {})
             candidates = [
@@ -203,6 +237,7 @@ def compare(prizepicks, fanduel, now=None, max_age_seconds=900):
                 )
             ]
             if not candidates:
+                without_estimate("No unambiguous, fresh two-sided sportsbook quote at this exact line.")
                 raise ValueError("Missing or ambiguous event/market")
             if key in seen:
                 continue
@@ -266,7 +301,8 @@ def compare(prizepicks, fanduel, now=None, max_age_seconds=900):
                     "reference_bookmaker": fd.get("bookmaker_name", "FanDuel"),
                     "book_comparisons": book_comparisons,
                     "book_count": len(book_comparisons),
-                    "payout_verified": pp.get("variant") == "standard",
+                    "payout_verified": False,
+                    "projection_variant": pp.get("variant"),
                     "source_url": fd.get(
                         "source_url", "https://sportsbook.fanduel.com/"
                     ),
@@ -296,6 +332,12 @@ def compare(prizepicks, fanduel, now=None, max_age_seconds=900):
     return {
         "schema_version": 2,
         "opportunities": results,
+        "unmatched": list({row["id"]: row for row in unmatched}.values()),
+        "payout_verification": {
+            "standard_schedule_checked_at": PAYOUT_VERIFIED_AT,
+            "source_url": PAYOUT_SOURCE,
+            "account_entry_verified": False,
+        },
         "last_updated": utc_now(),
         "models": BET_TYPES,
         "payout_source": PAYOUT_SOURCE,

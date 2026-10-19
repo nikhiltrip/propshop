@@ -89,6 +89,16 @@ class AnalysisTests(unittest.TestCase):
         self.assertEqual(compare([PP], [FD, FD], NOW)["opportunities"], [])
         self.assertNotEqual(canonical_stat("points"), canonical_stat("pts+rebs"))
 
+    def test_unmatched_lines_have_reasons_but_never_invent_probabilities(self):
+        result = compare([{**PP, "line": 25}, PP], [{**FD, "line": 26.5}], NOW)
+        self.assertEqual(result["opportunities"], [])
+        self.assertEqual(len(result["unmatched"]), 2)
+        self.assertIn("Integer", result["unmatched"][0]["reason"])
+        self.assertIn("exact line", result["unmatched"][1]["reason"])
+        self.assertNotIn("no_vig_over", result["unmatched"][0])
+        self.assertFalse(compare([PP], [FD], NOW)["opportunities"][0]["payout_verified"])
+        self.assertFalse(result["payout_verification"]["account_entry_verified"])
+
     def test_legacy_or_missing_metadata_rejected(self):
         self.assertEqual(
             compare([{"player": "Test Player", "line": 25.5}], [FD], NOW)[
