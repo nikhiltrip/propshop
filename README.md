@@ -12,7 +12,7 @@ A successful October 19, 2026 run retrieved **72 PrizePicks lines and 267 sports
 
 ## Run locally
 
-Requires Python 3.9+ and Node 20+. The default public collector uses the Python standard library; no browser installation is required.
+Requires macOS or Linux (the collector uses POSIX file locking), Python 3.9+ and Node 20+. The default public collector uses the Python standard library; no browser installation is required.
 
 ```bash
 npm ci --prefix server
@@ -31,7 +31,7 @@ python3 daily_scraper.py
 python3 daily_scraper.py --sports NFL --max-events 5
 ```
 
-The collector discovers public market categories and game IDs, checks schedule start times for today and tomorrow, and makes bounded requests with three workers and at least 350 ms between request starts. Access denials/rate limits stop subsequent requests. There are no retries, proxy rotation or challenge automation. NBA/NFL/MLB/NHL are supported only when the source actually publishes relevant props.
+The collector discovers public market categories and game IDs, checks schedule start times for today and tomorrow, and makes bounded requests with three workers and at least 350 ms between request starts. Access denials/rate limits stop new requests; requests already in flight may finish. There are no retries, proxy rotation or challenge automation. NBA/NFL/MLB/NHL are supported only when the source actually publishes relevant props.
 
 Configuration uses exported environment variables, not automatic `.env` loading:
 
@@ -45,6 +45,14 @@ Configuration uses exported environment variables, not automatic `.env` loading:
 
 `--max-events` limits total upcoming games (1–100, default 20). The API stops a collection after ten minutes. Snapshots expire after 15 minutes and started events are excluded. Collection is on demand; polling the local API does not fetch third-party prices. No recurring schedule is installed automatically.
 
+## Coverage and dashboard controls
+
+The dashboard shows accepted exact-line comparisons, not the complete PrizePicks board. Collection covers supported full-game stat categories discovered on the source pages, within the configured event limit and 48-hour window. Markets missing from the feed, unsupported stat names, integer lines, and quotes at different lines do not produce comparison rows. The reported sportsbook quote count includes quotes across books and lines; it is not a count of unique player props.
+
+**Positive edge only is enabled by default.** Turn it off to see all accepted comparisons, including those below the selected entry model's break-even probability. In the October 19 test, this explains why one row was visible despite 53 valid comparisons. Selecting another entry model changes each row's threshold, edge and illustrative entry ROI. The summary's **Above model break-even** count uses the best eligible model, so it can differ from the filtered table using your selected model.
+
+The **Over/Under percentages** estimate each side from sportsbook prices. **Edge** is the difference from the chosen model's break-even rate, in percentage points. Expand **Sportsbook quotes** to inspect the contributing prices and number of books; a single-book comparison has less independent market evidence. Collection status and coverage warnings explain unavailable sources or leagues. Full PrizePicks coverage and account-specific payout verification remain unfinished.
+
 ## What the percentages mean
 
 For each sportsbook at the **exact PrizePicks line**, convert both prices to implied probabilities and normalize to remove that book's margin:
@@ -56,7 +64,7 @@ no_vig_under = 1 - no_vig_over
 
 The displayed consensus is the median over probability across eligible books, with under equal to one minus over. This prevents selecting only the most optimistic sportsbook. Single-book estimates are labeled. Expand **Sportsbook quotes** to see each book's over/under prices and over probability. Different lines are never interpolated.
 
-Matching requires league, normalized player, explicit stat alias, numeric line, full-game period, start time and shared provider event ID. Ambiguous duplicate book quotes, incomplete/invalid prices, unavailable lines, unknown markets, started events, and observations retrieved more than 15 minutes ago are excluded. Integer lines are excluded because ties need a separate settlement model.
+In the default public data path, matching requires league, normalized player, explicit stat alias, numeric line, full-game period, start time and shared provider event ID. Ambiguous duplicate book quotes, incomplete/invalid prices, unavailable lines, unknown markets, started events, and observations retrieved more than 15 minutes ago are excluded. Integer lines are excluded because ties need a separate settlement model.
 
 A market percentage is an estimate from offered prices, not a measured true win rate.
 
