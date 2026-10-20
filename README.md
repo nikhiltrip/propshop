@@ -15,6 +15,8 @@ A successful October 19, 2026 run at 4:56 PM Pacific retrieved **122 PrizePicks 
 Requires macOS or Linux (the collector uses POSIX file locking), Python 3.9+ and Node 20+. The default public collector uses the Python standard library; no browser installation is required.
 
 ```bash
+git clone https://github.com/nikhiltrip/propshop.git
+cd propshop
 npm ci --prefix server
 npm ci --prefix client
 npm run build --prefix client
@@ -44,6 +46,16 @@ Configuration uses exported environment variables, not automatic `.env` loading:
 | `PORT=3001` | API/static dashboard port; use 3011 if 3001 is occupied |
 
 `--max-events` limits total upcoming games (1–100, default 20). The API stops a collection after ten minutes. Snapshots expire after 15 minutes and started events are excluded. Collection is on demand; polling the local API does not fetch third-party prices. No recurring schedule is installed automatically.
+
+## Running this on another computer
+
+The intended distribution is a local app: each person clones the repo, installs the prerequisites above, and runs their own server. They do not need your PrizePicks/FanDuel login, cookies, API keys or browser profile. Do not share `data/browser-profile/` or any credentials. Native Windows is not supported by the current POSIX collector; use a Linux environment such as WSL for these commands. Windows/WSL and other people's networks have not been validated in this project.
+
+The default **public** path avoids the direct PrizePicks/FanDuel CAPTCHA flow. This does **not** guarantee access for every user. ScoresAndOdds or its upstream endpoint may rate-limit requests, deny particular networks, change schema, or become unavailable. HTTP 401/403/429 stops new requests; do not try to bypass a challenge, rotate proxies, or repeatedly retry. The optional direct browser adapters are experimental and can still require login/verification or be blocked after login. They are not the recommended setup path.
+
+Successful collection also does not prove the reported lines match PrizePicks right now. On October 19, 2026, a refreshed PrizePicks board showed Christian McCaffrey's rushing-yards line at **62.5**, while a fresh public comparison request still reported **63.5** for the same game. Five other comparable NFL spot-checks matched; a seventh observation had no accepted comparison. This is evidence that reported lines can differ, not an accuracy rate for the entire feed. The app does not independently correct or suppress every such discrepancy: confirm the actual line before relying on a row.
+
+If the requirement is dependable access for arbitrary users, this free undocumented endpoint is an unresolved dependency. An appropriately licensed API with documented access/support, and each user's own required key, would reduce access uncertainty. It would still require coverage and latency checks. No such provider is currently integrated or promised.
 
 ## Coverage and dashboard controls
 
@@ -169,6 +181,21 @@ npm run build --prefix client
 ```
 
 Tests use synthetic fixtures confined to tests. They cover odds validation, no-vig math, complete Flex payouts, consensus across same-line books, provider event identity/periods, source provenance, exclusion of premium fields, access-denial handling, stale/started rows, snapshot preservation, job lifecycle, model/stat filtering, unmatched-line expiry, custom payout validation/confirmation/reset, unchanged sportsbook probabilities, and empty states. Live collection and the dashboard refresh button are checked separately against real public data.
+
+### Repeatable reliability checks
+
+Run a collection, then audit the resulting snapshot:
+
+```bash
+python3 daily_scraper.py
+python3 validate_snapshot.py
+```
+
+Do not count an old snapshot preserved after a failed collection as a successful new collection. The auditor makes no network requests and does not change dashboard data. It independently recalculates sportsbook implied probabilities and the median, checks observation ages at publication, event starts, duplicate evidence, finite values and account-payout claims. It flags old feed-record timestamps separately; these are not certified per-book quote timestamps. Reports are saved under ignored `data/validation/` (or `PROPSHOP_DATA_DIR`). The history counts distinct Pacific **collection dates**, not repeated audit times. Today’s successful test is one observed day, not completed multi-day validation.
+
+For a contemporaneous read-only PrizePicks board check, optionally provide a local JSON array using `--checks /path/to/checks.json`. Each item needs `sport`, `player`, `stat` (the feed label), `start_time` (the specific game's offset-aware time), `line`, `observed_at` (offset-aware), and `board_refreshed: true`. Record only public line observations; do not include account details or credentials. A unique matching player/stat/event is required. Observations more than five minutes apart or an unrefreshed board are marked unverified. Missing comparisons are separate from line mismatches. Exit code 1 flags an integrity error or an observed line mismatch; inspect the JSON report.
+
+A useful several-day trial repeats fresh collection on different dates and at different times, includes available sports and games near start time, and compares a sample of displayed lines directly with PrizePicks. Record access failures and missing markets as well as successes. Math checks alone cannot certify true source freshness, account-specific availability/payouts, cross-network access, or profitable outcomes. No background collection is installed by these commands.
 
 ## Remaining limitations
 
