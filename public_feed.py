@@ -38,6 +38,42 @@ SPORTSBOOKS = {
 }
 
 
+# Exact labels verified on the public category pages on 2026-10-19.
+# Only request categories that also appear in the current league's menu.
+PATH_MARKETS = {
+    "passing-yards": "passing yards", "rushing-yards": "rushing yards",
+    "receiving-yards": "receiving yards", "receptions": "receptions",
+    "points": "points", "rebounds": "rebounds", "assists": "assists",
+    "3-pointers": "3 pointers", "strikeouts": "strikeouts", "hits": "hits",
+    "shots-on-goal": "shots on goal", "saves": "saves",
+    "completions": "completions", "interceptions": "interceptions",
+    "kicking-points": "kicking points", "longest-completion": "longest completion",
+    "longest-reception": "longest reception", "longest-rush": "longest rush",
+    "pass-attempts": "pass attempts", "passing-&-rushing-yards": "passing & rushing yards",
+    "passing-tds": "passing tds", "rush-attempts": "rush attempts",
+    "rushing-&-receiving-yards": "rushing & receiving yards", "touchdowns": "touchdowns",
+    "goals": "goals", "blocked-shots": "blocked shots",
+    "earned-runs-allowed": "earned runs allowed", "hits,-runs-&-rbis": "hits, runs & rbis",
+    "hits-allowed": "hits allowed", "home-runs": "home runs", "outs": "outs",
+    "runs-batted-in": "runs batted in", "singles": "singles", "steals": "steals",
+    "total-bases": "total bases", "walks-allowed": "walks allowed",
+}
+
+
+def discover_markets(parser):
+    supported = {stat for ev, stat in parser.markets if ev and canonical_stat(stat)}
+    unsupported = set()
+    for ev, path in parser.markets:
+        if ev:
+            continue
+        slug = path.rsplit("/", 1)[-1]
+        if slug in PATH_MARKETS:
+            supported.add(PATH_MARKETS[slug])
+        else:
+            unsupported.add(slug)
+    return sorted(supported), sorted(unsupported)
+
+
 class PageParser(HTMLParser):
     def __init__(self):
         super().__init__(convert_charrefs=True)
@@ -276,28 +312,7 @@ def collect_public(sports, data_dir, max_events=20):
             html = client.get(f"{SITE}/{sport.lower()}/props")
             parser = PageParser()
             parser.feed(html)
-            # The free picker has exact stat display names in its detail drawers.
-            supported.update(
-                stat for ev, stat in parser.markets if ev and canonical_stat(stat)
-            )
-            # Additional full-game stat names are explicit in public menu paths.
-            path_aliases = {
-                "passing-yards": "passing yards",
-                "rushing-yards": "rushing yards",
-                "receiving-yards": "receiving yards",
-                "receptions": "receptions",
-                "points": "points",
-                "rebounds": "rebounds",
-                "assists": "assists",
-                "3-pointers": "3 pointers",
-                "strikeouts": "strikeouts",
-                "hits": "hits",
-                "shots-on-goal": "shots on goal",
-                "saves": "saves",
-            }
-            for ev, path in parser.markets:
-                if not ev and path.rsplit("/", 1)[-1] in path_aliases:
-                    supported.add(path_aliases[path.rsplit("/", 1)[-1]])
+            supported, unsupported = discover_markets(parser)
             market_names[sport] = sorted(supported)
             for day in [today, today + timedelta(days=1)]:
                 html = client.get(
@@ -311,13 +326,15 @@ def collect_public(sports, data_dir, max_events=20):
                 {
                     "sport": sport,
                     "markets": sorted(supported),
+                    "unsupported_markets": unsupported,
                     "status": "available" if supported else "no_public_props",
                 }
             )
         except CollectionError as error:
             errors.append({"sport": sport, "message": str(error)})
     selected = sorted(
-        events.values(), key=lambda event: parse_time(event["start_time"])
+        (event for event in events.values() if market_names.get(event["sport"])),
+        key=lambda event: parse_time(event["start_time"])
     )[:max_events]
     pp_rows, book_rows = [], []
     jobs = [
@@ -351,6 +368,15 @@ def collect_public(sports, data_dir, max_events=20):
 
     pp_rows = dedupe(pp_rows, ["event_id", "player", "stat", "line"])
     book_rows = dedupe(book_rows, ["event_id", "player", "stat", "line", "bookmaker"])
+    for item in coverage:
+        league = item["sport"]
+        item["events_scanned"] = sum(e["sport"] == league for e in selected)
+        item["prizepicks_lines"] = sum(r["sport"] == league for r in pp_rows)
+        item["sportsbook_quotes"] = sum(r["sport"] == league for r in book_rows)
+        item["market_counts"] = {
+            stat: sum(r["sport"] == league and r["stat"] == stat for r in pp_rows)
+            for stat in item["markets"]
+        }
     # Store only non-sensitive coverage counts, not raw premium-containing payloads.
     info = {
         "source": "scoresandodds",

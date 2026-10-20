@@ -30,9 +30,17 @@ test("snapshot suppresses legacy, stale and started opportunities", () => {
     last_updated: iso(now - 1000),
     opportunities: [row, { ...row, start_time: iso(now - 1000) }],
     stats: {},
+    unmatched: [
+      { id: "unmatched", observed_at: iso(now - 1000), start_time: iso(now + 3600000), reason: "Different line" },
+      { id: "started", observed_at: iso(now - 1000), start_time: iso(now - 1000) },
+    ],
+    payout_verification: { account_entry_verified: false },
   };
   fs.writeFileSync(path.join(dir, "opportunities.json"), JSON.stringify(data));
   assert.equal(snapshot(now).count, 1);
+  assert.equal(snapshot(now).unmatched.length, 1);
+  assert.equal(snapshot(now).payout_verification.account_entry_verified, false);
+  assert.equal(snapshot(now + 900001).unmatched.length, 0);
   assert.equal(snapshot(now + 900001).count, 0);
 });
 

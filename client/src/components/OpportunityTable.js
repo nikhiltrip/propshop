@@ -1,4 +1,6 @@
 import React, { useState } from "react";
+import PayoutReview from "./PayoutReview";
+import { customModel } from "../payoutMath";
 
 const names = [
   "6-Pick Flex",
@@ -13,20 +15,23 @@ const names = [
   "2-Pick Power",
 ];
 const odds = (n) => (n > 0 ? `+${n}` : String(n));
-export default function OpportunityTable({ opportunities, loading }) {
+export default function OpportunityTable({ opportunities, loading, modelDefinitions = {}, verification }) {
   const [search, setSearch] = useState("");
   const [sport, setSport] = useState("All");
+  const [stat, setStat] = useState("All stats");
   const [model, setModel] = useState("6-Pick Flex");
   const [minEdge, setMinEdge] = useState("");
   const [sort, setSort] = useState("edge");
-  const [positiveOnly, setPositiveOnly] = useState(true);
+  const [positiveOnly, setPositiveOnly] = useState(false);
+  const [custom, setCustom] = useState(null);
   const rows = opportunities
-    .map((row) => ({ ...row, model: row.models.find((m) => m.type === model) }))
+    .map((row) => ({ ...row, model: custom ? (custom.error ? null : customModel(row, custom)) : row.models.find((m) => m.type === model) }))
     .filter(
       (row) =>
         row.model &&
         row.player.toLowerCase().includes(search.trim().toLowerCase()) &&
         (sport === "All" || sport === row.sport) &&
+        (stat === "All stats" || stat === row.stat) &&
         (!positiveOnly || row.model.edge > 0) &&
         (minEdge === "" || row.model.edge >= Number(minEdge)),
     )
@@ -56,15 +61,21 @@ export default function OpportunityTable({ opportunities, loading }) {
         </label>
         <label>
           Sport
-          <select value={sport} onChange={(e) => setSport(e.target.value)}>
+          <select value={sport} onChange={(e) => { setSport(e.target.value); setStat("All stats"); }}>
             {["All", "NBA", "NFL", "MLB", "NHL"].map((s) => (
               <option key={s}>{s}</option>
             ))}
           </select>
         </label>
         <label>
+          Stat category
+          <select value={stat} onChange={(e) => setStat(e.target.value)}>
+            {["All stats", ...Array.from(new Set(opportunities.filter((row) => sport === "All" || row.sport === sport).map((row) => row.stat))).sort()].map((name) => <option key={name}>{name}</option>)}
+          </select>
+        </label>
+        <label>
           Entry model
-          <select value={model} onChange={(e) => setModel(e.target.value)}>
+          <select value={model} onChange={(e) => { setModel(e.target.value); setCustom(null); }}>
             {names.map((n) => (
               <option key={n}>{n}</option>
             ))}
@@ -97,6 +108,9 @@ export default function OpportunityTable({ opportunities, loading }) {
           Positive edge only
         </label>
       </div>
+      <PayoutReview key={`${model}-${JSON.stringify(modelDefinitions[model]?.payouts)}`} model={model} definition={modelDefinitions[model]} verification={verification} onChange={setCustom} />
+      {custom?.error && <p className="notice warning" role="alert">{custom.error} Estimates are hidden until the schedule is complete.</p>}
+      <p className="muted">{custom ? "Your entered payout schedule" : model + " standard schedule"} · {custom?.confirmed && !custom.error ? "User-confirmed this session; independently unverified" : "Actual entry payout unverified"}. {opportunities.length - rows.length} fresh comparisons hidden by filters or an incomplete payout check.</p>
       {rows.length > 0 ? (
         <div className="table-scroll">
           <table>
@@ -200,15 +214,19 @@ export default function OpportunityTable({ opportunities, loading }) {
         <div className="empty">
           <span className="empty-icon">↗</span>
           <h3>
-            {loading
+            {custom?.error
+              ? "Complete the payout check to see estimates"
+              : loading
               ? "Loading the board…"
               : opportunities.length
                 ? "No comparisons match these filters"
                 : "Your board starts with real data"}
           </h3>
           <p>
-            {opportunities.length
-              ? "Try a different entry model, sport, or minimum edge."
+            {custom?.error
+              ? "Enter every return and confirm the actual entry schedule, or switch back to the published standard schedule."
+              : opportunities.length
+              ? "Try a different entry model, sport, stat category, or minimum edge."
               : "Collect PrizePicks lines and sportsbook odds to see fresh, exact-line comparisons here."}
           </p>
           <span className="empty-caption">
@@ -221,7 +239,7 @@ export default function OpportunityTable({ opportunities, loading }) {
       <div className="board-foot">
         {rows.length} shown · {opportunities.length} fresh matches{" "}
         <span>
-          Standard-payout model · confirm line and payout in PrizePicks
+          {custom ? "User-entered payout model" : "Standard-payout model"} · confirm line and payout in PrizePicks
         </span>
       </div>
     </section>

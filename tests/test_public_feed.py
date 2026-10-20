@@ -9,7 +9,7 @@ from urllib.error import HTTPError
 
 from analysis import compare
 from collectors import CollectionError
-from public_feed import parse_schedule, parse_comparison, PageParser, PublicClient
+from public_feed import parse_schedule, parse_comparison, PageParser, PublicClient, discover_markets, PATH_MARKETS
 
 EVENT = {
     "id": "nfl/123",
@@ -127,6 +127,23 @@ class PublicFeedTests(unittest.TestCase):
             ),
             [],
         )
+
+    def test_new_categories_are_discovered_only_when_published(self):
+        parser = PageParser()
+        parser.feed('<a data-endpoint="/nfl/props/completions"></a>'
+                    '<a data-endpoint="/nfl/props/passing-&amp;-rushing-yards"></a>'
+                    '<a data-endpoint="/nfl/props/first-touchdown-scorer"></a>')
+        supported, unsupported = discover_markets(parser)
+        self.assertEqual(supported, ["completions", "passing & rushing yards"])
+        self.assertEqual(unsupported, ["first-touchdown-scorer"])
+        from analysis import canonical_stat
+        for stat in PATH_MARKETS.values():
+            self.assertIsNotNone(canonical_stat(stat), stat)
+        self.assertNotEqual(canonical_stat("passing yards"), canonical_stat("passing & rushing yards"))
+        payload = copy.deepcopy(PAYLOAD)
+        payload["markets"][0]["stat"] = "completions"
+        pp, books = parse_comparison(payload, EVENT, OBSERVED)
+        self.assertEqual(len(compare(pp, books, NOW)["opportunities"]), 1)
 
     def test_access_denials_do_not_retry(self):
         with patch(

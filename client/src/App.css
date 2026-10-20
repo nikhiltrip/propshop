@@ -452,3 +452,18 @@ td small {
   td:nth-child(4) { grid-column:1/-1; order:2; border-top:1px solid #2a343f; }
   td.green { font-size:20px; }
 }
+
+.coverage, .payout-review {
+  border: 1px solid #34414d; border-radius: 8px; padding: 16px;
+  margin-bottom: 20px; font-size: 13px; line-height: 1.6;
+}
+.coverage summary, .payout-review summary { cursor: pointer; color: #c5dfa8; }
+.coverage-league { border-top: 1px solid #29343f; padding-top: 12px; }
+.unmatched-list { max-height: 320px; overflow: auto; }
+.unmatched-list > div { padding: 10px 0; border-bottom: 1px solid #29343f; }
+.unmatched-list small { display: block; color: #a6b0be; }
+.payout-review > label { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
+.payout-review .check { flex-direction: row; align-items: center; }
+.payout-inputs { display: grid; grid-template-columns: repeat(auto-fit, minmax(105px, 1fr)); gap: 12px; }
+.payout-inputs label { display: flex; flex-direction: column; gap: 8px; }
+.payout-inputs input { width: 100%; min-width: 0; }

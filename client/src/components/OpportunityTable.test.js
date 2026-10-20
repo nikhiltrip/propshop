@@ -37,6 +37,8 @@ test("changing entry model re-filters against the selected payout threshold", ()
   const root = createRoot(container);
   act(() => root.render(<OpportunityTable opportunities={[base]} />));
   expect(container.textContent).toContain("Synthetic Player");
+  const positiveOnly = container.querySelector('input[type="checkbox"]');
+  act(() => positiveOnly.click());
   const model = Array.from(container.querySelectorAll("select")).find(
     (s) => s.value === "6-Pick Flex",
   );
@@ -46,7 +48,6 @@ test("changing entry model re-filters against the selected payout threshold", ()
   });
   expect(container.textContent).not.toContain("Synthetic Player");
   expect(container.textContent).toContain("No comparisons match these filters");
-  const positiveOnly = container.querySelector('input[type="checkbox"]');
   act(() => positiveOnly.click());
   expect(container.textContent).toContain("Synthetic Player");
   expect(container.textContent).toContain("-0.94");
@@ -60,5 +61,41 @@ test("missing source data shows an empty board without invented odds", () => {
   act(() => root.render(<OpportunityTable opportunities={[]} />));
   expect(container.querySelector("tbody")).toBeNull();
   expect(container.textContent).toContain("Your board starts with real data");
+  act(() => root.unmount());
+});
+
+
+test("custom schedule requires confirmation, changes estimates, and resets on model switch", () => {
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  const definitions = { "6-Pick Flex": { payouts: { 4: 0.4, 5: 2, 6: 25 } } };
+  act(() => root.render(<OpportunityTable opportunities={[base]} modelDefinitions={definitions} />));
+  const schedule = container.querySelector(".payout-review select");
+  act(() => { schedule.value = "custom"; schedule.dispatchEvent(new Event("change", { bubbles: true })); });
+  expect(container.querySelector("tbody")).toBeNull();
+  const confirm = container.querySelector('.payout-review input[type="checkbox"]');
+  act(() => confirm.click());
+  expect(container.querySelector("tbody").textContent).toContain("Synthetic Player");
+  expect(container.textContent).toContain("User-confirmed this session");
+  const model = Array.from(container.querySelectorAll("select")).find((s) => s.value === "6-Pick Flex");
+  act(() => { model.value = "2-Pick Power"; model.dispatchEvent(new Event("change", { bubbles: true })); });
+  expect(container.querySelector("tbody").textContent).toContain("-0.94");
+  expect(container.querySelector(".payout-review select").value).toBe("standard");
+  expect(container.textContent).toContain("Actual entry payout unverified");
+  act(() => root.unmount()); container.remove();
+});
+
+test("all comparisons are visible by default and stat filter narrows the board", () => {
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  act(() => root.render(<OpportunityTable opportunities={[
+    base, { ...base, id: "other", player: "Other Player", stat: "Rebounds" },
+  ]} />));
+  expect(container.querySelectorAll("tbody tr")).toHaveLength(2);
+  const stat = Array.from(container.querySelectorAll("select")).find((s) => s.value === "All stats");
+  act(() => { stat.value = "Rebounds"; stat.dispatchEvent(new Event("change", { bubbles: true })); });
+  expect(container.querySelectorAll("tbody tr")).toHaveLength(1);
+  expect(container.querySelector("tbody").textContent).toContain("Other Player");
   act(() => root.unmount());
 });

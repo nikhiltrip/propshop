@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import "./App.css";
 import OpportunityTable from "./components/OpportunityTable";
+import Coverage from "./components/Coverage";
 
 export default function App() {
   const [data, setData] = useState(null);
@@ -168,10 +169,11 @@ export default function App() {
           <div>
             <span>Above model break-even</span>
             <strong className="green">{data?.stats?.plus_ev_found ?? 0}</strong>
-            <small>Best qualifying entry model</small>
+            <small>Best standard entry model</small>
           </div>
         </section>
-        <OpportunityTable opportunities={rows} loading={!data && !error} />
+        <Coverage source={data?.source_info} opportunities={rows} unmatched={data?.unmatched || []} />
+        <OpportunityTable opportunities={rows} loading={!data && !error} modelDefinitions={data?.models || {}} verification={data?.payout_verification} />
         <details className="method">
           <summary>How to read this board</summary>
           <p>
@@ -190,8 +192,8 @@ export default function App() {
             correlation, promotions and settlement rules can change the result.
             Integer lines, started events and unknown markets are excluded. The
             public feed does not certify modified-projection status or your
-            account’s payout. All entry-model estimates are conditional on
-            standard payouts; verify them in PrizePicks.
+            account’s payout. Entry estimates use either the published standard schedule or the complete
+            schedule you enter in the payout check. User confirmation is not independent verification.
           </p>
           <p>
             Models use standard Player Picks minimum-guarantee payouts,

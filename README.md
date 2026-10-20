@@ -6,9 +6,9 @@ A local React dashboard that compares PrizePicks lines with sportsbook over/unde
 
 The default collector uses the same public comparison request as ScoresAndOdds' free **Odds Compare** drawer. Its response includes PrizePicks main lines and prices from FanDuel, DraftKings, BetMGM, Caesars, bet365, BetRivers, Hard Rock and Fanatics. It does not require a sportsbook login or API key. No premium projections, account data, affiliate links, or betting actions are used.
 
-A successful October 19, 2026 run retrieved **72 PrizePicks lines and 267 sportsbook quotes**, producing **53 exact-line comparisons across NFL, NHL and MLB**, including one above the standard-payout model's break-even rate. Those counts describe that run, not guaranteed future coverage or profitability. The source had no NBA props published at the time.
+A successful October 19, 2026 run at 4:56 PM Pacific retrieved **122 PrizePicks lines and 509 sportsbook quotes**, producing **98 exact-line comparisons across NFL, NHL and MLB**, including two above the standard-payout model's break-even rate. Another 24 collected lines lacked an estimate: 19 integer lines requiring tie modeling and five without an unambiguous exact-line quote. Those counts describe that run, not guaranteed future coverage or profitability. The source had no NBA props published at the time.
 
-**PrizePicks lines are reported by a third party.** The source does not certify your account's payout, promotions, or Goblin/Demon status. Every entry model is conditional on standard Player Picks payouts. Confirm both the line and payout in PrizePicks before relying on an estimated edge. Prices may move or the source may lag: a source refresh does not guarantee the underlying sportsbook just updated its quote.
+**PrizePicks lines are reported by a third party.** The source does not certify your account's payout, promotions, or Goblin/Demon status. Published entry models are conditional on standard Player Picks payouts; the dashboard also supports a complete user-entered payout schedule. Confirm both the line and payout in PrizePicks before relying on an estimated edge. Prices may move or the source may lag: a source refresh does not guarantee the underlying sportsbook just updated its quote.
 
 ## Run locally
 
@@ -49,9 +49,9 @@ Configuration uses exported environment variables, not automatic `.env` loading:
 
 The dashboard shows accepted exact-line comparisons, not the complete PrizePicks board. Collection covers supported full-game stat categories discovered on the source pages, within the configured event limit and 48-hour window. Markets missing from the feed, unsupported stat names, integer lines, and quotes at different lines do not produce comparison rows. The reported sportsbook quote count includes quotes across books and lines; it is not a count of unique player props.
 
-**Positive edge only is enabled by default.** Turn it off to see all accepted comparisons, including those below the selected entry model's break-even probability. In the October 19 test, this explains why one row was visible despite 53 valid comparisons. Selecting another entry model changes each row's threshold, edge and illustrative entry ROI. The summary's **Above model break-even** count uses the best eligible model, so it can differ from the filtered table using your selected model.
+**All accepted comparisons are shown by default**, including rows below the selected model's break-even probability. Enable **Positive edge only** to hide negative/zero estimates. Filter by sport, stat category, player, or minimum edge. Earlier versions enabled the positive-only filter by default, which hid most comparisons. Selecting another entry model changes each row's threshold, edge and illustrative entry ROI. The summary's **Above model break-even** count uses the best eligible model, so it can differ from the filtered table using your selected model.
 
-The **Over/Under percentages** estimate each side from sportsbook prices. **Edge** is the difference from the chosen model's break-even rate, in percentage points. Expand **Sportsbook quotes** to inspect the contributing prices and number of books; a single-book comparison has less independent market evidence. Collection status and coverage warnings explain unavailable sources or leagues. Full PrizePicks coverage and account-specific payout verification remain unfinished.
+The **Over/Under percentages** estimate each side from sportsbook prices. **Edge** is the difference from the chosen model's break-even rate, in percentage points. Expand **Sportsbook quotes** to inspect the contributing prices and number of books; a single-book comparison has less independent market evidence. Collection status and coverage warnings explain unavailable sources or leagues. Expand **Coverage** to see per-league/category collection counts, unsupported categories, and collected lines without an estimate. These lines have an explicit reason and no invented probability. The collector recognizes 16 published NFL categories, 12 MLB categories and five NHL categories when their menus publish them; a supported category may still return zero PrizePicks lines. NBA collection remains dependent on source publication. First/last touchdown scorer markets remain unsupported because they are not ordinary two-sided totals. Full PrizePicks coverage and automatic account-specific payout verification remain unfinished.
 
 ## What the percentages mean
 
@@ -102,6 +102,14 @@ The following table is the **standard Player Picks minimum-guarantee schedule** 
 
 For Power, `p = multiplier ** (-1 / pick_count)`. For Flex, PropShop includes every outcome in `sum(C(n,k) * p**k * (1-p)**(n-k) * payout[k]) = 1`. Looking only at Flex's all-hit multiplier produces the wrong threshold.
 
+### Check your actual entry payout in the dashboard
+
+Expand **Check the payout behind your edge estimate** to inspect every outcome of the selected model, including partial Flex returns and zero returns. The API exposes the standard schedule's manual verification date and source. Projection type does not verify an account's payout: collected rows remain `payout_verified: false`, including directly collected standard projections.
+
+If the actual PrizePicks entry differs, select **Enter the payout shown for my entry**, copy total-return multipliers for every correct-pick count, and confirm that you copied the complete schedule. A $10 entry returning $30 total uses 3x. The dashboard recalculates equal-leg break-even, edge and illustrative entry ROI from that schedule; sportsbook percentages stay unchanged. Incomplete, invalid or unconfirmed custom schedules hide estimates. Returns must be nonnegative and nondecreasing with correct picks, with the all-hit return above 1x and zero-hit return below 1x. Nonmonotone promotions and schedules outside these constraints are unsupported.
+
+This is a user-confirmed calculation, not an account connection or independent verification. It does not verify that the displayed players can be combined into the actual entry, or account for correlations, DNPs, ties, fees or leaderboard awards. The form applies one hypothetical schedule to the board for comparison. Values remain only in the current page session, reset when switching entry model or reloading, and are never sent to the server. The summary's positive count continues to use published standard models; custom values affect the comparison table only.
+
 ### When the standard table does not apply
 
 PrizePicks' [Payouts explanation](https://www.prizepicks.com/help-center/payouts) says entry-specific amounts can differ because of promotions, bonus lineups, pick combinations, special projections, mixed Player/Team entries, and other disclosed factors. DNPs, Reboots and ties can also change settlement. **The payout schedule displayed for the actual entry controls; this table does not verify account-specific eligibility or payout.**
@@ -116,7 +124,7 @@ Payout verification is manual. **Collect fresh lines refreshes source lines and 
 
 When a published standard schedule changes:
 
-1. Recheck both official sources above and the actual product/entry details; record the verification date and applicable schedule.
+1. Recheck both official sources above and the actual product/entry details; record the verification date and applicable schedule in this README and `analysis.PAYOUT_VERIFIED_AT`.
 2. Update the complete hit-count mapping in `analysis.PAYOUTS`, including partial Flex returns. Do not change only the top multiplier or paste a rounded break-even percentage.
 3. Recalculate the README table from `analysis.BET_TYPES`. `threshold()` derives break-even probabilities from the full mapping.
 4. Run `python3 -m unittest discover -s tests -v`, then collect a new snapshot. Saved snapshots contain their calculated models; reading an old snapshot does not recalculate it after a payout-code change.
@@ -145,7 +153,7 @@ Collection has an API process lock and a POSIX file lock for CLI overlap. Failed
 | Endpoint | Response |
 | --- | --- |
 | `GET /health` | Server health |
-| `GET /api/opportunities` | Fresh comparisons, source/coverage, summary, collection state |
+| `GET /api/opportunities` | Fresh comparisons, unmatched lines/reasons, source/coverage, payout verification metadata, summary, collection state |
 | `GET /api/opportunities/:id` | Fresh row or 404 |
 | `GET /api/stats` | Summary |
 | `POST /api/trigger-scrape` | 202 accepted, 409 running, or explicit failure |
@@ -160,7 +168,7 @@ CI=true npm test --prefix client -- --watchAll=false --runInBand
 npm run build --prefix client
 ```
 
-Tests use synthetic fixtures confined to tests. They cover odds validation, no-vig math, complete Flex payouts, consensus across same-line books, provider event identity/periods, source provenance, exclusion of premium fields, access-denial handling, stale/started rows, snapshot preservation, job lifecycle, model switching and empty states. Live collection and the dashboard refresh button are checked separately against real public data.
+Tests use synthetic fixtures confined to tests. They cover odds validation, no-vig math, complete Flex payouts, consensus across same-line books, provider event identity/periods, source provenance, exclusion of premium fields, access-denial handling, stale/started rows, snapshot preservation, job lifecycle, model/stat filtering, unmatched-line expiry, custom payout validation/confirmation/reset, unchanged sportsbook probabilities, and empty states. Live collection and the dashboard refresh button are checked separately against real public data.
 
 ## Remaining limitations
 
