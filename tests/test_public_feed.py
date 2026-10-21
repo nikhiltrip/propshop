@@ -160,3 +160,12 @@ class PublicFeedTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class PublicBudgetTests(unittest.TestCase):
+    def test_deadline_does_not_send_request(self):
+        with patch('public_feed.urlopen') as request:
+            client = PublicClient(timeout=0)
+            with self.assertRaises(CollectionError) as error:
+                client.get('https://www.scoresandodds.com/nba')
+            self.assertEqual(error.exception.code, 'deadline')
+            request.assert_not_called()

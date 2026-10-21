@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import "./App.css";
 import OpportunityTable from "./components/OpportunityTable";
 import Coverage from "./components/Coverage";
+import Results from "./components/Results";
 
 export default function App() {
   const [data, setData] = useState(null);
@@ -111,7 +112,7 @@ export default function App() {
               ?.filter((c) => c.markets.length === 0)
               .map((c) => (
                 <span key={c.sport}>
-                  {c.sport}: this source has no props published.
+                  {c.sport}: no supported prop categories were discovered.
                 </span>
               ))}
             {data.source_info.warnings?.length > 0 && (
@@ -174,6 +175,8 @@ export default function App() {
         </section>
         <Coverage source={data?.source_info} opportunities={rows} unmatched={data?.unmatched || []} />
         <OpportunityTable opportunities={rows} loading={!data && !error} modelDefinitions={data?.models || {}} verification={data?.payout_verification} />
+        {data?.quarantined > 0 && <p className="notice warning">{data.quarantined} market(s) removed from ranking due to a mismatch, modified projection, or expired manual check. See Coverage and recheck after collecting fresh lines.</p>}
+        <Results collectionBusy={busy} />
         <details className="method">
           <summary>How to read this board</summary>
           <p>

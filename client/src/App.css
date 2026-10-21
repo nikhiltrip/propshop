@@ -467,3 +467,13 @@ td small {
 .payout-inputs { display: grid; grid-template-columns: repeat(auto-fit, minmax(105px, 1fr)); gap: 12px; }
 .payout-inputs label { display: flex; flex-direction: column; gap: 8px; }
 .payout-inputs input { width: 100%; min-width: 0; }
+
+.line-check { margin-top: 8px; text-align: left; min-width: 135px; white-space: normal; font-size: 11px; }
+.line-check summary { cursor: pointer; color: #c5dfa8; }
+.line-check label { display: flex; flex-direction: column; margin: 8px 0; gap: 5px; }
+.line-check input, .line-check select { width: 100%; min-width: 0; }
+.line-check button, .history-panel button { background: #b5ed83; color: #14210c; border: 0; padding: 9px; border-radius: 6px; }
+.history-panel { border: 1px solid #34414d; border-radius: 8px; margin: 24px 0; padding: 18px; font-size: 13px; line-height: 1.6; }
+.history-list { max-height: 420px; overflow-y: auto; }
+.history-list article { border-top: 1px solid #29343f; padding: 14px 0; }
+.history-list small { display: block; color: #a6b0be; }

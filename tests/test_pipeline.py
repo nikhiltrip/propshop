@@ -42,3 +42,24 @@ class PipelineTests(unittest.TestCase):
                 daily_scraper.atomic_json(file, {"bad": float("nan")})
             self.assertEqual(json.loads(file.read_text()), {"ok": True})
             self.assertEqual(list(Path(folder).glob("*.tmp")), [])
+
+    def test_failure_diagnostics_are_retained(self):
+        diagnostics = {'warnings': [{'code': 'access_denied', 'message': 'HTTP 403'}], 'events_scanned': 2}
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            with patch.object(daily_scraper, 'DATA_DIR', root), patch.object(daily_scraper, 'collect_public', side_effect=CollectionError('Denied', 'access_denied', diagnostics)), patch('sys.argv', ['daily_scraper.py']):
+                with self.assertRaises(SystemExit): daily_scraper.main()
+            status = json.loads((root / 'collection-status.json').read_text())
+            self.assertEqual(status['code'], 'access_denied')
+            self.assertEqual(status['source_info'], diagnostics)
+            self.assertFalse((root / 'opportunities.json').exists())
+
+    def test_clean_empty_collection_publishes_empty_snapshot(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            info = {'source': 'scoresandodds', 'availability': 'empty', 'empty_reason': 'No upcoming games.'}
+            with patch.object(daily_scraper, 'DATA_DIR', root), patch.object(daily_scraper, 'collect_public', return_value=([], [], info)), patch('sys.argv', ['daily_scraper.py']):
+                daily_scraper.main()
+            snapshot = json.loads((root / 'opportunities.json').read_text())
+            self.assertEqual(snapshot['opportunities'], [])
+            self.assertEqual(json.loads((root / 'collection-status.json').read_text())['state'], 'succeeded')

@@ -10,7 +10,11 @@ from analysis import utc_now, canonical_stat
 
 
 class CollectionError(RuntimeError):
-    pass
+    def __init__(self, message, code="collection_failed", diagnostics=None):
+        super().__init__(message)
+        self.code = code
+        self.diagnostics = diagnostics or {}
+
 
 
 def parse_prizepicks(payload, observed_at=None):
