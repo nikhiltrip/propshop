@@ -321,6 +321,8 @@ def compare(prizepicks, fanduel, now=None, max_age_seconds=900):
                     "fanduel_observed_at": fd["observed_at"],
                     "sportsbook_observed_at": min(q["observed_at"] for q in candidates),
                     "event": fd.get("event", ""),
+                    "home_team": pp.get("home_team"),
+                    "away_team": pp.get("away_team"),
                     "prizepicks_url": "https://app.prizepicks.com/",
                     "fanduel_url": "https://sportsbook.fanduel.com/",
                 }

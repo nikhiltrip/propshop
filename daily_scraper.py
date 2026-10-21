@@ -11,6 +11,7 @@ import tempfile
 from analysis import compare, utc_now
 from collectors import CollectionError, collect_browser
 from public_feed import collect_public
+from history import record_snapshot
 
 ROOT = Path(__file__).resolve().parent
 DATA_DIR = Path(os.environ.get("PROPSHOP_DATA_DIR", ROOT / "data"))
@@ -66,7 +67,7 @@ def main():
         atomic_json(status_path, {"state": "running", "started_at": started})
         try:
             if args.source == "public":
-                pp, fd, source_info = collect_public(sports, DATA_DIR, args.max_events)
+                pp, fd, source_info = collect_public(sports, DATA_DIR, args.max_events, args.timeout)
             else:
                 pp, fd = asyncio.run(
                     collect_browser(sports, args.headed, args.timeout, args.max_events)
@@ -78,10 +79,8 @@ def main():
             result = compare(pp, fd)
             result["source"] = source_info["source"]
             result["source_info"] = source_info
-            if not result["opportunities"]:
-                raise CollectionError(
-                    "Both sources returned data, but no fresh exact-line, full-game matches passed validation. Last successful snapshot retained."
-                )
+            # Archive before publication so a failed history write cannot silently lose estimates.
+            record_snapshot(DATA_DIR, result)
             atomic_json(DATA_DIR / "opportunities.json", result)
             atomic_json(
                 status_path,
@@ -89,7 +88,8 @@ def main():
                     "state": "succeeded",
                     "started_at": started,
                     "finished_at": utc_now(),
-                    "message": f"Matched {len(result['opportunities'])} props.",
+                    "message": f"Matched {len(result['opportunities'])} props." if result['opportunities'] else source_info.get('empty_reason') or "No exact-line comparisons are available.",
+                    "source_info": source_info,
                 },
             )
             print(json.dumps(result["stats"]))
@@ -106,6 +106,8 @@ def main():
                     "started_at": started,
                     "finished_at": utc_now(),
                     "message": message,
+                    "code": getattr(exc, "code", "unexpected_error"),
+                    "source_info": getattr(exc, "diagnostics", {}),
                 },
             )
             print(message, file=sys.stderr)

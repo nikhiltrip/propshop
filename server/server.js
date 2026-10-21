@@ -2,6 +2,7 @@ const express = require("express");
 const fs = require("node:fs");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
+const { lineKey, applyChecks } = require("./line-checks");
 
 const ROOT = path.resolve(__dirname, "..");
 const DATA_DIR = process.env.PROPSHOP_DATA_DIR || path.join(ROOT, "data");
@@ -21,7 +22,7 @@ function snapshot(now = Date.now()) {
   const data = readJSON("opportunities.json");
   const valid = data?.schema_version === 2 && Array.isArray(data.opportunities);
   const stale = !valid || !fresh(data.last_updated, now);
-  const rows = stale
+  const rawRows = stale
     ? []
     : data.opportunities.filter(
         (row) =>
@@ -29,14 +30,16 @@ function snapshot(now = Date.now()) {
           fresh(row.sportsbook_observed_at || row.fanduel_observed_at, now) &&
           Date.parse(row.start_time) > now,
       );
+  const { accepted: rows, quarantined } = applyChecks(rawRows, readJSON("line-checks.json") || {}, now);
   const positive = rows.filter((r) => r.edge > 0);
   return {
     success: true,
     opportunities: rows,
     count: rows.length,
-    unmatched: stale ? [] : (data.unmatched || []).filter(
+    unmatched: [...(stale ? [] : (data.unmatched || []).filter(
       (row) => fresh(row.observed_at, now) && Date.parse(row.start_time) > now,
-    ),
+    )), ...quarantined],
+    quarantined: quarantined.length,
     payout_verification: valid ? data.payout_verification : null,
     is_stale: stale,
     last_updated: valid ? data.last_updated : null,
@@ -60,6 +63,26 @@ function snapshot(now = Date.now()) {
 function createApp({ spawnProcess = spawn } = {}) {
   const app = express();
   app.use(express.json({ limit: "8kb" }));
+  app.use((req, res, next) => {
+    const origin = req.get("origin");
+    const allowed = new Set([`http://localhost:${process.env.PORT || 3001}`, `http://127.0.0.1:${process.env.PORT || 3001}`, "http://localhost:3000", "http://127.0.0.1:3000"]);
+    if (req.method === "POST" && origin && !allowed.has(origin)) return res.status(403).json({ message: "Local requests only." });
+    next();
+  });
+  app.post("/api/line-checks", (req, res) => {
+    const row = snapshot().opportunities.find((r) => r.id === req.body.id) ||
+      (readJSON("opportunities.json")?.opportunities || []).find((r) => r.id === req.body.id && fresh(r.prizepicks_observed_at, Date.now()) && Date.parse(r.start_time) > Date.now());
+    if (!row) return res.status(404).json({ message: "Collect a fresh market before checking this line." });
+    const { actual_line: actual, variant } = req.body;
+    if (typeof actual !== "number" || !Number.isFinite(actual) || actual < 0 || !["standard", "goblin", "demon", "unknown"].includes(variant)) return res.status(400).json({ message: "Enter a valid line and projection type." });
+    const checks = readJSON("line-checks.json") || {};
+    checks[lineKey(row)] = { actual_line: actual, variant, checked_at: new Date().toISOString() };
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    const temporary = path.join(DATA_DIR, "line-checks.tmp");
+    fs.writeFileSync(temporary, JSON.stringify(checks));
+    fs.renameSync(temporary, path.join(DATA_DIR, "line-checks.json"));
+    return res.json({ matched: actual === row.line && variant === "standard", message: "Line check saved locally. Account payout and settlement remain unverified." });
+  });
   let job = { state: "idle" };
   let child = null;
   const status = () => {
@@ -74,6 +97,36 @@ function createApp({ spawnProcess = spawn } = {}) {
         }
       : disk || job;
   };
+  let resultsChild = null;
+  let resultsJob = { state: "idle" };
+  app.get("/api/results", (req, res) => res.json({
+    ...(readJSON("results.json") || { records: [], counts: {}, tracked_positive_estimates: 0 }),
+    collection: resultsJob.state !== "idle" ? resultsJob : (() => {
+      const saved = readJSON("results-status.json");
+      return saved?.state === "running" ? { ...saved, state: "interrupted", message: "Previous result update was interrupted." } : saved || resultsJob;
+    })(),
+  }));
+  app.post("/api/refresh-results", (req, res) => {
+    if (child || resultsChild) return res.status(409).json({ message: "A collection or result update is already running." });
+    resultsJob = { state: "running", started_at: new Date().toISOString() };
+    const venv = path.join(ROOT, ".venv", "bin", "python");
+    const python = process.env.PYTHON || (fs.existsSync(venv) ? venv : "python3");
+    let timer, failed = false;
+    const finish = (state, message) => { clearTimeout(timer); resultsChild = null; resultsJob = { ...resultsJob, state, message }; };
+    try {
+      resultsChild = spawnProcess(python, [path.join(ROOT, "results.py"), "refresh"], { cwd: ROOT, env: process.env, stdio: ["ignore", "pipe", "pipe"] });
+      resultsChild.stdout.on("data", () => {}); resultsChild.stderr.on("data", () => {});
+      resultsChild.once("error", () => { failed = true; finish("failed", "Could not start result checker."); });
+      resultsChild.once("close", (code) => {
+        if (failed) return;
+        const saved = readJSON("results-status.json");
+        finish(code === 0 ? "succeeded" : "failed", saved && Date.parse(saved.started_at) >= Date.parse(resultsJob.started_at) ? saved.message : "Result check finished; inspect history status.");
+      });
+      timer = setTimeout(() => { failed = true; resultsChild?.kill("SIGTERM"); finish("failed", "Result update timed out; previous outcomes retained."); }, 120000);
+      timer.unref();
+      return res.status(202).json({ collection: resultsJob });
+    } catch (error) { finish("failed", "Could not start result checker."); return res.status(500).json({ message: resultsJob.message }); }
+  });
   app.get("/health", (req, res) =>
     res.json({ status: "ok", service: "propshop" }),
   );
@@ -108,7 +161,7 @@ function createApp({ spawnProcess = spawn } = {}) {
       return res
         .status(403)
         .json({ success: false, message: "Local requests only." });
-    if (child)
+    if (child || resultsChild)
       return res.status(409).json({
         success: false,
         message: "Collection already running.",
@@ -127,7 +180,9 @@ function createApp({ spawnProcess = spawn } = {}) {
     const finish = (state, message) => {
       clearTimeout(timer);
       child = null;
-      job = { ...job, state, message, finished_at: new Date().toISOString() };
+      const saved = readJSON("collection-status.json");
+      const diagnostics = saved && Date.parse(saved.started_at) >= Date.parse(job.started_at) ? { code: saved.code, source_info: saved.source_info } : {};
+      job = { ...job, ...diagnostics, state, message, finished_at: new Date().toISOString() };
     };
     try {
       child = spawnProcess(python, [path.join(ROOT, "daily_scraper.py")], {

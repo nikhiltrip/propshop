@@ -7,6 +7,7 @@ Premium projections and other paid analysis fields are never used or persisted.
 
 import gzip
 from html.parser import HTMLParser
+from http.client import HTTPException
 import json
 import math
 import threading
@@ -93,7 +94,7 @@ class PageParser(HTMLParser):
             and attrs.get("data-market")
         ):
             self.markets.add((attrs["data-event"], attrs["data-market"]))
-        endpoint = attrs.get("data-endpoint", "")
+        endpoint = attrs.get("data-endpoint") or ""
         # Stat labels/paths are discovered from the public prop picker, not guessed.
         if "/props/" in endpoint:
             self.markets.add(("", endpoint))
@@ -158,7 +159,8 @@ def parse_schedule(html, sport):
 class PublicClient:
     """Bounded requests; no retries on access denials, no persistent raw payloads."""
 
-    def __init__(self):
+    def __init__(self, timeout=90):
+        self.deadline = time.monotonic() + timeout
         self.lock = threading.Lock()
         self.last_request = 0.0
         self.blocked = threading.Event()
@@ -178,6 +180,11 @@ class PublicClient:
             delay = 0.35 - (time.monotonic() - self.last_request)
             if delay > 0:
                 time.sleep(delay)
+            remaining = self.deadline - time.monotonic()
+            if self.blocked.is_set():
+                raise CollectionError("Public feed access denied; no further requests sent.", "access_denied")
+            if remaining <= 0:
+                raise CollectionError("Public collection time limit reached; no further requests sent.", "deadline")
             self.last_request = time.monotonic()
         try:
             request = Request(
@@ -187,7 +194,7 @@ class PublicClient:
                     "Accept": "text/html,application/json",
                 },
             )
-            with urlopen(request, timeout=20) as response:
+            with urlopen(request, timeout=min(10, remaining)) as response:
                 body = response.read(8 * 1024 * 1024)
                 if body[:2] == b"\x1f\x8b":
                     body = gzip.decompress(body)
@@ -196,20 +203,24 @@ class PublicClient:
             if error.code in (401, 403, 429):
                 self.blocked.set()
             raise CollectionError(
-                f"Public comparison feed returned HTTP {error.code}; collection stopped for this request."
+                f"Public comparison feed returned HTTP {error.code}; collection stopped for this request.",
+                "access_denied" if error.code in (401, 403, 429) else "http_error",
             ) from None
-        except (URLError, TimeoutError, UnicodeError, OSError):
+        except (URLError, TimeoutError, UnicodeError, OSError, HTTPException):
             raise CollectionError(
-                "Public comparison feed could not be reached."
+                "Public comparison feed could not be reached.", "network_error"
             ) from None
 
     def market(self, event, stat):
         params = {"event": event, "market": stat, "t": int(time.time())}
         try:
-            return json.loads(self.get(COMPARISON + "?" + urlencode(params)))
+            payload = json.loads(self.get(COMPARISON + "?" + urlencode(params)))
+            if not isinstance(payload, dict) or not isinstance(payload.get("markets"), list):
+                raise CollectionError("Public comparison schema changed: markets array missing.", "schema_changed")
+            return payload
         except ValueError:
             raise CollectionError(
-                "Public comparison feed returned invalid JSON."
+                "Public comparison feed returned invalid JSON.", "schema_changed"
             ) from None
 
 
@@ -261,6 +272,8 @@ def parse_comparison(payload, event, observed_at=None):
                 "observed_at": observed_at,
                 "event_id": event["id"],
                 "event": event["event"],
+                "home_team": event["home"],
+                "away_team": event["away"],
                 "source_url": event["url"],
                 "source": "scoresandodds",
                 "provider_updated_at": (
@@ -301,8 +314,8 @@ def parse_comparison(payload, event, observed_at=None):
     return pp_rows, book_rows
 
 
-def collect_public(sports, data_dir, max_events=20):
-    client = PublicClient()
+def collect_public(sports, data_dir, max_events=20, timeout=90):
+    client = PublicClient(timeout)
     now = datetime.now(timezone.utc)
     today = now.astimezone(ZoneInfo("America/Los_Angeles")).date()
     coverage, errors, events, market_names = [], [], {}, {}
@@ -331,11 +344,14 @@ def collect_public(sports, data_dir, max_events=20):
                 }
             )
         except CollectionError as error:
-            errors.append({"sport": sport, "message": str(error)})
-    selected = sorted(
-        (event for event in events.values() if market_names.get(event["sport"])),
-        key=lambda event: parse_time(event["start_time"])
-    )[:max_events]
+            errors.append({"sport": sport, "message": str(error), "code": error.code})
+    # Give every available league a turn before spending the event budget on one league.
+    queues = {sport: sorted((e for e in events.values() if e["sport"] == sport and market_names.get(sport)), key=lambda e: parse_time(e["start_time"])) for sport in sports}
+    selected = []
+    while len(selected) < max_events and any(queues.values()):
+        for sport in sports:
+            if queues[sport] and len(selected) < max_events:
+                selected.append(queues[sport].pop(0))
     pp_rows, book_rows = [], []
     jobs = [
         (event, stat)
@@ -346,19 +362,31 @@ def collect_public(sports, data_dir, max_events=20):
     def fetch(job):
         event, stat = job
         payload = client.market(event["id"], stat)
-        return parse_comparison(payload, event)
+        parsed = parse_comparison(payload, event)
+        metadata = payload.get("event", {})
+        if payload["markets"] and (metadata.get("sport", "").upper() != event["sport"] or
+            {metadata.get("home", {}).get("key"), metadata.get("away", {}).get("key")} != {event["home"], event["away"]}):
+            raise CollectionError("Comparison event identity does not match schedule.", "event_mismatch")
+        offered = sum(isinstance(m, dict) and m.get("comparison", {}).get("prizepicks", {}).get("available") is True for m in payload["markets"])
+        if offered and not parsed[0]:
+            raise CollectionError("Available PrizePicks markets failed parser validation.", "schema_changed")
+        return parsed, len(payload["markets"])
 
+    returned_markets = 0
+    completed_jobs = 0
     with ThreadPoolExecutor(max_workers=3) as pool:
         futures = {pool.submit(fetch, job): job for job in jobs}
         for future in as_completed(futures):
             event, stat = futures[future]
             try:
-                pp, books = future.result()
+                (pp, books), count = future.result()
+                returned_markets += count
+                completed_jobs += 1
                 pp_rows.extend(pp)
                 book_rows.extend(books)
             except CollectionError as error:
                 errors.append(
-                    {"sport": event["sport"], "market": stat, "message": str(error)}
+                    {"sport": event["sport"], "event_id": event["id"], "market": stat, "message": str(error), "code": error.code}
                 )
 
     def dedupe(rows, fields):
@@ -384,13 +412,19 @@ def collect_public(sports, data_dir, max_events=20):
         "events_scanned": len(selected),
         "events_available": len(events),
         "requests_for_markets": len(jobs),
+        "completed_market_requests": completed_jobs,
+        "returned_markets": returned_markets,
         "coverage": coverage,
         "warnings": errors,
         "collected_at": utc_now(),
         "prizepicks_line_verification": "Third-party main lines; confirm current line and payout in PrizePicks.",
     }
-    if not pp_rows or not book_rows:
-        raise CollectionError(
-            "Public feed returned no available PrizePicks / sportsbook comparisons. Last successful snapshot retained."
-        )
+    if errors and (not pp_rows or not book_rows or any(e["code"] in ("access_denied", "schema_changed", "event_mismatch") for e in errors)):
+        code = next((e["code"] for e in errors if e["code"] == "access_denied"), errors[0]["code"])
+        raise CollectionError(f"Collection incomplete ({code}); see persisted source diagnostics. Last successful snapshot retained.", code, info)
+    info["availability"] = "available" if pp_rows and book_rows else "empty"
+    info["empty_reason"] = None if info["availability"] == "available" else (
+        "No upcoming games with published supported markets." if not jobs else
+        "The source returned no available PrizePicks/two-sided sportsbook pairs for the selected games."
+    )
     return pp_rows, book_rows, info

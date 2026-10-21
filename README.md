@@ -1,18 +1,38 @@
 # PropShop
 
-A local React dashboard that compares PrizePicks lines with sportsbook over/under prices and ranks estimated edges. Python collects the free [ScoresAndOdds prop comparisons](https://www.scoresandodds.com/nfl/props), validates exact event/line matches, calculates no-vig probabilities, and publishes a snapshot served by Express.
+**A sports-prop research dashboard with multi-book pricing, exact-line comparisons, and a complete Power/Flex valuation engine.**
 
-## Working data path
+Compare reported PrizePicks lines with prices from **eight sportsbooks**, inspect the market's no-vig probabilities, and rank conditional edges across NBA, NFL, MLB and NHL. PropShop combines a concurrent Python collection pipeline, an Express API and a responsive React interface. You can check the actual PrizePicks line, model a custom payout schedule, and review saved estimates against final box scores from one local workspace.
 
-The default collector uses the same public comparison request as ScoresAndOdds' free **Odds Compare** drawer. Its response includes PrizePicks main lines and prices from FanDuel, DraftKings, BetMGM, Caesars, bet365, BetRivers, Hard Rock and Fanatics. It does not require a sportsbook login or API key. No premium projections, account data, affiliate links, or betting actions are used.
+## Highlights
 
-A successful October 19, 2026 run at 4:56 PM Pacific retrieved **122 PrizePicks lines and 509 sportsbook quotes**, producing **98 exact-line comparisons across NFL, NHL and MLB**, including two above the standard-payout model's break-even rate. Another 24 collected lines lacked an estimate: 19 integer lines requiring tie modeling and five without an unambiguous exact-line quote. Those counts describe that run, not guaranteed future coverage or profitability. The source had no NBA props published at the time.
+- **Multi-book consensus:** FanDuel, DraftKings, BetMGM, Caesars, bet365, BetRivers, Hard Rock and Fanatics. The engine uses the median probability across eligible books at the exact same line.
+- **Complete entry math:** ten standard Power/Flex schedules, including partial Flex returns, plus a custom payout editor that recalculates break-even rates and hypothetical entry ROI.
+- **Line validation:** record the line and projection type you see in PrizePicks. Known mismatches, modified projections and expired checks leave the ranked board until you recheck them.
+- **Persistent research history:** SQLite preserves the first positive estimate at each line/direction and archives collection snapshots. The final-stat checker separates hypothetical wins/losses from pending or unresolved observations.
+- **Operational controls:** a collection time budget, request pacing, process locks, atomic snapshots, structured failure diagnostics and stale/started-event filtering.
+- **A local-first workflow:** run the default public collector without account credentials, browser cookies or an API key.
 
-**PrizePicks lines are reported by a third party.** The source does not certify your account's payout, promotions, or Goblin/Demon status. Published entry models are conditional on standard Player Picks payouts; the dashboard also supports a complete user-entered payout schedule. Confirm both the line and payout in PrizePicks before relying on an estimated edge. Prices may move or the source may lag: a source refresh does not guarantee the underlying sportsbook just updated its quote.
+### Measured live collection
 
-## Run locally
+An October 20, 2026 run retrieved **274 reported PrizePicks lines and 1,270 sportsbook quotes**, yielding **196 exact-line comparisons** across NBA and NHL. The source covered eight sportsbooks. This run completed 60 of 101 planned market requests within the 90-second budget; 41 requests recorded network/deadline warnings, so these figures describe partial coverage at that moment. They measure collection capacity, not prediction accuracy or profit. An earlier October 19 run produced 98 comparisons across NFL, NHL and MLB.
 
-Requires macOS or Linux (the collector uses POSIX file locking), Python 3.9+ and Node 20+. The default public collector uses the Python standard library; no browser installation is required.
+## Architecture
+
+```mermaid
+flowchart LR
+    A[Public comparison feed] --> B[Python collection and validation]
+    B --> C[Exact-line consensus and payout engine]
+    C --> D[Atomic snapshot + SQLite history]
+    D --> E[Express API]
+    E --> F[React dashboard]
+    G[Public ESPN box scores] --> H[Final-stat checker]
+    H --> D
+```
+
+## Quick start
+
+Use **Python 3.9+**, **Node 20+**, Git, and macOS or Linux. Windows users can use a Linux environment such as WSL; native Windows and WSL have not been validated. The default collector uses the Python standard library.
 
 ```bash
 git clone https://github.com/nikhiltrip/propshop.git
@@ -23,73 +43,68 @@ npm run build --prefix client
 PORT=3011 node server/server.js
 ```
 
-Open http://localhost:3011 and click **Collect fresh lines**. The API serves the built React dashboard. The server binds to loopback, with no public authentication system. For frontend development, use the API's default port 3001 and `npm start --prefix client`; the development proxy targets port 3001.
+Open **http://localhost:3011** and select **Collect fresh lines**. The API serves the production React build and binds to loopback. For frontend development, start the API on port 3001 and run `npm start --prefix client`; the development proxy uses port 3001.
 
-Standalone collection:
+A clean-dependency smoke test on macOS with Python 3.9.6 and Node 23.11.0 installed the server and client from their lockfiles and built the UI without reusing the repository's inherited `node_modules`. This validates setup on that machine; other operating systems and networks still need independent testing.
+
+## Using the dashboard
+
+1. **Collect and filter.** Browse all accepted comparisons, or narrow by player, sport, stat, minimum edge or positive edges only.
+2. **Inspect the evidence.** Expand **Sportsbook quotes** for each contributing book's over/under prices. Single-book estimates have less independent market evidence.
+3. **Check the line.** Expand **Feed line only · check it**, enter the current line and projection type from the same PrizePicks game, and save your observation. A matching standard line receives a 15-minute user-confirmed label. Mismatches, modifiers and expired checks move to Coverage, where you can recheck them. This records your observation; it does not connect to your account or certify its payout.
+4. **Check the entry payout.** Inspect every hit-count return in the standard schedule or enter the complete schedule shown for your actual entry. Custom entries change model thresholds and ROI, not sportsbook probabilities.
+5. **Review history.** **Saved estimates and results** preserves the first positive estimate at each line and direction. Select **Check final stats** to match games by team identity and scheduled start time and inspect public box-score outcomes.
+
+The summary's **Above model break-even** count uses the best standard entry model. The comparison table uses your selected standard/custom model, so its visible count can differ. All accepted comparisons appear by default; **Positive edge only** is optional.
+
+## Collection and data sources
+
+The default collector uses the public [ScoresAndOdds Odds Compare feed](https://www.scoresandodds.com/nfl/props), which reports PrizePicks main lines and sportsbook prices. It reads supported categories from the source's current menus, discovers today/tomorrow schedules, and considers upcoming games within 48 hours. The event budget gives each available league a turn before allocating additional games. Categories with no source lines remain visible in coverage diagnostics.
+
+Requests use three workers with at least 350 ms between starts. `--timeout` limits the public collection budget (default 90 seconds); each request has a maximum 10-second socket timeout. Queued requests stop after the budget or an access denial. Requests already in flight may finish. Partial collections retain request-level warnings. HTTP 401/403/429 and schema/identity failures preserve the previous snapshot with structured error details. Clean empty source results publish an empty board with a reason, instead of masquerading as a network failure.
 
 ```bash
 python3 daily_scraper.py
-# Limit collection if desired:
-python3 daily_scraper.py --sports NFL --max-events 5
+python3 daily_scraper.py --sports NBA,NHL --max-events 10 --timeout 90
+python3 results.py refresh
 ```
 
-The collector discovers public market categories and game IDs, checks schedule start times for today and tomorrow, and makes bounded requests with three workers and at least 350 ms between request starts. Access denials/rate limits stop new requests; requests already in flight may finish. There are no retries, proxy rotation or challenge automation. NBA/NFL/MLB/NHL are supported only when the source actually publishes relevant props.
-
-Configuration uses exported environment variables, not automatic `.env` loading:
+Configuration uses exported environment variables; the app does not load `.env` automatically.
 
 | Variable | Purpose |
 | --- | --- |
-| `PROPSHOP_SOURCE=public` | Default: public ScoresAndOdds comparison feed |
+| `PROPSHOP_SOURCE=public` | Public comparison feed (default); `browser` selects optional direct adapters |
 | `PROPSHOP_SPORTS=NBA,NFL,MLB,NHL` | Leagues to collect |
 | `PYTHON=/absolute/path/to/python` | Interpreter override; otherwise `.venv/bin/python`, then `python3` |
-| `PROPSHOP_DATA_DIR=/absolute/path` | Snapshot/status location |
-| `PORT=3001` | API/static dashboard port; use 3011 if 3001 is occupied |
+| `PROPSHOP_DATA_DIR=/absolute/path` | Snapshots, SQLite history, line checks, status and audit reports |
+| `PORT=3011` | API/static dashboard port (default 3001) |
 
-`--max-events` limits total upcoming games (1–100, default 20). The API stops a collection after ten minutes. Snapshots expire after 15 minutes and started events are excluded. Collection is on demand; polling the local API does not fetch third-party prices. No recurring schedule is installed automatically.
+`--max-events` limits total upcoming games (1–100, default 20). Snapshots and manual line confirmations expire after 15 minutes; started events leave the active board. Collection and final-stat updates run on demand. Polling local API state does not fetch external prices. These setup commands install no recurring scheduler.
 
-## Running this on another computer
+## How the calculations work
 
-The intended distribution is a local app: each person clones the repo, installs the prerequisites above, and runs their own server. They do not need your PrizePicks/FanDuel login, cookies, API keys or browser profile. Do not share `data/browser-profile/` or any credentials. Native Windows is not supported by the current POSIX collector; use a Linux environment such as WSL for these commands. Windows/WSL and other people's networks have not been validated in this project.
-
-The default **public** path avoids the direct PrizePicks/FanDuel CAPTCHA flow. This does **not** guarantee access for every user. ScoresAndOdds or its upstream endpoint may rate-limit requests, deny particular networks, change schema, or become unavailable. HTTP 401/403/429 stops new requests; do not try to bypass a challenge, rotate proxies, or repeatedly retry. The optional direct browser adapters are experimental and can still require login/verification or be blocked after login. They are not the recommended setup path.
-
-Successful collection also does not prove the reported lines match PrizePicks right now. On October 19, 2026, a refreshed PrizePicks board showed Christian McCaffrey's rushing-yards line at **62.5**, while a fresh public comparison request still reported **63.5** for the same game. Five other comparable NFL spot-checks matched; a seventh observation had no accepted comparison. This is evidence that reported lines can differ, not an accuracy rate for the entire feed. The app does not independently correct or suppress every such discrepancy: confirm the actual line before relying on a row.
-
-If the requirement is dependable access for arbitrary users, this free undocumented endpoint is an unresolved dependency. An appropriately licensed API with documented access/support, and each user's own required key, would reduce access uncertainty. It would still require coverage and latency checks. No such provider is currently integrated or promised.
-
-## Coverage and dashboard controls
-
-The dashboard shows accepted exact-line comparisons, not the complete PrizePicks board. Collection covers supported full-game stat categories discovered on the source pages, within the configured event limit and 48-hour window. Markets missing from the feed, unsupported stat names, integer lines, and quotes at different lines do not produce comparison rows. The reported sportsbook quote count includes quotes across books and lines; it is not a count of unique player props.
-
-**All accepted comparisons are shown by default**, including rows below the selected model's break-even probability. Enable **Positive edge only** to hide negative/zero estimates. Filter by sport, stat category, player, or minimum edge. Earlier versions enabled the positive-only filter by default, which hid most comparisons. Selecting another entry model changes each row's threshold, edge and illustrative entry ROI. The summary's **Above model break-even** count uses the best eligible model, so it can differ from the filtered table using your selected model.
-
-The **Over/Under percentages** estimate each side from sportsbook prices. **Edge** is the difference from the chosen model's break-even rate, in percentage points. Expand **Sportsbook quotes** to inspect the contributing prices and number of books; a single-book comparison has less independent market evidence. Collection status and coverage warnings explain unavailable sources or leagues. Expand **Coverage** to see per-league/category collection counts, unsupported categories, and collected lines without an estimate. These lines have an explicit reason and no invented probability. The collector recognizes 16 published NFL categories, 12 MLB categories and five NHL categories when their menus publish them; a supported category may still return zero PrizePicks lines. NBA collection remains dependent on source publication. First/last touchdown scorer markets remain unsupported because they are not ordinary two-sided totals. Full PrizePicks coverage and automatic account-specific payout verification remain unfinished.
-
-## What the percentages mean
-
-For each sportsbook at the **exact PrizePicks line**, convert both prices to implied probabilities and normalize to remove that book's margin:
+For each eligible sportsbook at the exact PrizePicks line, convert both American prices to implied probabilities and normalize the pair:
 
 ```text
 no_vig_over = implied_over / (implied_over + implied_under)
 no_vig_under = 1 - no_vig_over
+consensus_over = median(no_vig_over across eligible books)
+consensus_under = 1 - consensus_over
+edge (percentage points) = consensus side percentage - entry-model break-even percentage
+illustrative entry ROI = expected total return for equal, independent legs - 1
 ```
 
-The displayed consensus is the median over probability across eligible books, with under equal to one minus over. This prevents selecting only the most optimistic sportsbook. Single-book estimates are labeled. Expand **Sportsbook quotes** to see each book's over/under prices and over probability. Different lines are never interpolated.
+The public path requires matching league, normalized player, explicit stat alias, numeric line, full-game period, start time and provider event identity. Ambiguous duplicates and incomplete prices fail validation. Integer lines require tie modeling and remain outside ranked comparisons. The engine does not interpolate odds from different lines.
 
-In the default public data path, matching requires league, normalized player, explicit stat alias, numeric line, full-game period, start time and shared provider event ID. Ambiguous duplicate book quotes, incomplete/invalid prices, unavailable lines, unknown markets, started events, and observations retrieved more than 15 minutes ago are excluded. Integer lines are excluded because ties need a separate settlement model.
+Market probabilities are estimates derived from offered prices. Entry ROI describes a hypothetical full entry with equally likely, independent legs. Actual entry eligibility, correlations, account-specific offers and settlement can change the result.
 
-A market percentage is an estimate from offered prices, not a measured true win rate.
+## History and final-stat checks
 
-## Edge and entry models
+`history.sqlite` stores complete collection snapshots and immutable first-positive observations keyed by market line and direction. Refreshes add observations without rewriting the original estimate. The API exposes the 200 most recent positive estimates; the database retains the underlying history.
 
-```text
-edge (percentage points) = consensus win percentage - model break-even percentage
-illustrative entry ROI = expected payout for n independent, equally likely legs - 1
-```
+The result checker uses public ESPN scoreboards and box scores. It requires a unique team-and-time game match, an exact normalized athlete name and an applicable stat. It records a hypothetical win/loss only after the source marks the game final. Missing players, ambiguous matches, unsupported stat categories and unclear participation remain **Needs review**; missing data does not become zero. Use `python3 results.py refresh --recheck-final` to revisit completed outcomes after a stat-provider correction.
 
-Power models include the all-hit payout. Flex models include every partial-hit payout, including returns below the entry fee. Break-even thresholds are calculated from those complete payout tables rather than hard-coded rounded rates.
-
-Entry ROI describes an entire hypothetical entry whose legs all have the displayed probability. It is not one prop's expected return, a selected real lineup, or a guarantee. The project does not model correlations, actual entry eligibility, leaderboard payouts, account-specific offers, DNPs/reboots, or Early Payout.
+The initial grading covers supported NBA box-score totals/combinations, NHL goals/assists/points/shots/blocks/saves, selected NFL passing/rushing/receiving/kicking stats, and selected MLB batting/pitching stats. Some collected markets, such as NFL longest completion and MLB total bases, lack a supported grading field and remain unresolved. Records imported after the game carry a **reconstructed** label and do not enter prospective counts. These are research outcomes against the saved feed line, not actual bets, verified PrizePicks settlements, a profit calculation or independent portfolio trials.
 
 ### Verified PrizePicks payout schedules
 
@@ -143,9 +158,29 @@ When a published standard schedule changes:
 
 This review confirmed the existing modeled schedules; no payout constant needed changing on October 19, 2026.
 
-## Optional direct browser adapters
+## Reliability, access and validation
 
-The older direct PrizePicks/FanDuel route remains experimental and is **not needed by the default data path**. It was blocked by source restrictions during testing. It has not been verified end to end.
+The default public path avoids the direct PrizePicks/FanDuel login and CAPTCHA flow. Each user runs the local setup with their own network; they do not need your credentials or browser profile. The source remains an undocumented third-party endpoint: access, schema, coverage and latency can change. A supported provider integration would be needed to reduce this dependency for a broader distribution.
+
+A refreshed PrizePicks board on October 19 showed McCaffrey rushing yards at 62.5 while a fresh comparison request reported 63.5. The manual-check workflow now suppresses known discrepancies from ranking. Unchecked feed lines remain conditional estimates, and no account-specific payout receives an automatic verified label. A fresh retrieval time also does not certify a fresh sportsbook quote; feed-record timestamps can lag.
+
+```bash
+python3 -m unittest discover -s tests -v
+node --test server/server.test.js server/line-checks.test.js
+CI=true npm test --prefix client -- --watchAll=false --runInBand
+npm run build --prefix client
+python3 validate_snapshot.py
+```
+
+**51 automated tests pass** (30 Python, six API/line-check tests and 15 React/math tests). The production build and clean-dependency setup smoke test also pass. Tests cover exact matching, odds and payout math, source identity, request deadlines/access denials, empty versus failed collection, diagnostic preservation, immutable history, final-only grading, missing-player handling, line quarantine, model switching and UI states. Tests use synthetic fixtures; live collection, snapshot audits and clean-install checks provide separate integration evidence.
+
+The audit tool makes no network requests and leaves dashboard data unchanged. It recalculates no-vig consensus, checks timestamps and duplicate evidence, and reports old feed-record timestamps separately. Reports under `data/validation/` count distinct Pacific collection dates rather than repeated audits of one snapshot. Successful audited collections have now been observed on October 19 and October 20; this does not establish long-term accuracy or access from other networks.
+
+Optional direct line checks use `python3 validate_snapshot.py --checks /path/to/checks.json`. The local file contains an array of public observations with `sport`, `player`, `stat` (feed label), `start_time`, `line`, `observed_at` and `board_refreshed: true`. Observations over five minutes apart remain unverified. The audit file and the dashboard's line-check registry are separate workflows. Do not count a retained snapshot after a failed collection as a new successful day.
+
+### Optional direct browser adapters
+
+The default public path needs no browser. The older direct PrizePicks/FanDuel adapters use ordinary Playwright and remain experimental; source restrictions blocked end-to-end verification.
 
 ```bash
 python3 -m venv .venv
@@ -154,51 +189,20 @@ python3 -m venv .venv
 .venv/bin/python daily_scraper.py --source browser --headed --timeout 300
 ```
 
-This route uses a dedicated persistent profile at ignored `data/browser-profile/`, so a successful manual login can survive later runs. `PROPSHOP_PROFILE_DIR` overrides its path. This profile contains private session cookies: do not upload or share it. It never reads or copies your main Chrome profile. `PROPSHOP_HEADED=1` shows the browser; complete any verification yourself. Restrictions stop collection. There are no stealth scripts, fake geolocation, or automated CAPTCHA actions.
+The dedicated ignored profile defaults to `data/browser-profile/`; `PROPSHOP_PROFILE_DIR` overrides it. Complete login/verification yourself. Keep session cookies private. The adapters do not read your main Chrome profile or automate challenges. `PROPSHOP_SAVE_RAW=1` enables direct-browser parser debugging; the default collector stores parsed public fields and snapshots rather than raw provider payloads.
 
-`PROPSHOP_SAVE_RAW=1` optionally saves direct-browser public response payloads for parser debugging; the default public collector does not persist raw payloads.
+## Local API
 
-## Reliability and API
-
-Collection has an API process lock and a POSIX file lock for CLI overlap. Failed collections preserve the last successful snapshot. Files are published with temporary-file/atomic replacement. Schema checks reject legacy fake-result formats. No unavailable-data path falls back to sample bets.
-
-| Endpoint | Response |
+| Endpoint | Response/action |
 | --- | --- |
 | `GET /health` | Server health |
-| `GET /api/opportunities` | Fresh comparisons, unmatched lines/reasons, source/coverage, payout verification metadata, summary, collection state |
-| `GET /api/opportunities/:id` | Fresh row or 404 |
-| `GET /api/stats` | Summary |
-| `POST /api/trigger-scrape` | 202 accepted, 409 running, or explicit failure |
-| `GET /api/scrape-status` | `idle`, `running`, `succeeded`, `failed`, or `interrupted` |
+| `GET /api/opportunities` | Fresh comparisons, quarantined/unmatched lines, coverage, payout metadata and collection state |
+| `GET /api/opportunities/:id` | Fresh ranked row or 404 |
+| `GET /api/stats` | Current board summary |
+| `POST /api/trigger-scrape` | Start collection; 202 accepted or 409 busy |
+| `GET /api/scrape-status` | Collection state and structured diagnostics |
+| `POST /api/line-checks` | Save a local user observation for a fresh market |
+| `GET /api/results` | Saved positive estimates, hypothetical outcomes and checker state |
+| `POST /api/refresh-results` | Start final-stat verification; 202 accepted or 409 busy |
 
-## Verification
-
-```bash
-python3 -m unittest discover -s tests -v
-node --test server/server.test.js
-CI=true npm test --prefix client -- --watchAll=false --runInBand
-npm run build --prefix client
-```
-
-Tests use synthetic fixtures confined to tests. They cover odds validation, no-vig math, complete Flex payouts, consensus across same-line books, provider event identity/periods, source provenance, exclusion of premium fields, access-denial handling, stale/started rows, snapshot preservation, job lifecycle, model/stat filtering, unmatched-line expiry, custom payout validation/confirmation/reset, unchanged sportsbook probabilities, and empty states. Live collection and the dashboard refresh button are checked separately against real public data.
-
-### Repeatable reliability checks
-
-Run a collection, then audit the resulting snapshot:
-
-```bash
-python3 daily_scraper.py
-python3 validate_snapshot.py
-```
-
-Do not count an old snapshot preserved after a failed collection as a successful new collection. The auditor makes no network requests and does not change dashboard data. It independently recalculates sportsbook implied probabilities and the median, checks observation ages at publication, event starts, duplicate evidence, finite values and account-payout claims. It flags old feed-record timestamps separately; these are not certified per-book quote timestamps. Reports are saved under ignored `data/validation/` (or `PROPSHOP_DATA_DIR`). The history counts distinct Pacific **collection dates**, not repeated audit times. Today’s successful test is one observed day, not completed multi-day validation.
-
-For a contemporaneous read-only PrizePicks board check, optionally provide a local JSON array using `--checks /path/to/checks.json`. Each item needs `sport`, `player`, `stat` (the feed label), `start_time` (the specific game's offset-aware time), `line`, `observed_at` (offset-aware), and `board_refreshed: true`. Record only public line observations; do not include account details or credentials. A unique matching player/stat/event is required. Observations more than five minutes apart or an unrefreshed board are marked unverified. Missing comparisons are separate from line mismatches. Exit code 1 flags an integrity error or an observed line mismatch; inspect the JSON report.
-
-A useful several-day trial repeats fresh collection on different dates and at different times, includes available sports and games near start time, and compares a sample of displayed lines directly with PrizePicks. Record access failures and missing markets as well as successes. Math checks alone cannot certify true source freshness, account-specific availability/payouts, cross-network access, or profitable outcomes. No background collection is installed by these commands.
-
-## Remaining limitations
-
-The public endpoint is an implementation detail of another site, not a contracted API with an uptime guarantee. Its schema, availability, or permitted access can change. Source coverage is partial and third-party lines can lag. The dashboard shows provenance and source warnings rather than claiming complete market coverage.
-
-Before public deployment, add authentication, operational monitoring, and data-use arrangements suitable for the intended use. The repository inherited tracked `node_modules/` directories; install from package lockfiles and keep future dependency housekeeping separate.
+The server binds to loopback and rejects cross-site mutation origins. A public deployment would require authentication, monitoring and suitable data-use arrangements. The repository inherited tracked dependency folders; lockfile installs provide the tested setup path.

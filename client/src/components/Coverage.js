@@ -1,4 +1,5 @@
 import React from "react";
+import LineCheck from "./LineCheck";
 
 export default function Coverage({ source, opportunities, unmatched }) {
   return <details className="coverage">
@@ -15,6 +16,7 @@ export default function Coverage({ source, opportunities, unmatched }) {
       <div className="unmatched-list">{unmatched.map((row) => <div key={row.id}>
         <strong>{row.player}</strong> · {row.sport} · {row.stat} {row.line}
         <small>{row.reason}</small>
+        {row.recheck && <LineCheck row={row} />}
       </div>)}</div>
     </>}
   </details>;

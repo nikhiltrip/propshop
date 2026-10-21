@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import PayoutReview from "./PayoutReview";
+import LineCheck from "./LineCheck";
 import { customModel } from "../payoutMath";
 
 const names = [
@@ -140,7 +141,7 @@ export default function OpportunityTable({ opportunities, loading, modelDefiniti
                       {row.direction === "over" ? "More" : "Less"}
                     </span>
                   </td>
-                  <td className="number" data-label="PrizePicks line">{row.line}</td>
+                  <td className="number" data-label="PrizePicks line">{row.line}<LineCheck row={row} /></td>
                   <td className="number" data-label="Sportsbook quotes">
                     <details className="quotes">
                       <summary>
